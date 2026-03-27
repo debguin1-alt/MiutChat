@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Miut</title>
+  <meta name="description" content="Private encrypted group chat. Code-locked rooms. No accounts." />
+  <meta name="theme-color" content="#0d1a1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Miut" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="ripple-container"></div>
+
+<!-- SPLASH ─────────────────────────────────── -->
+<div id="splash" class="screen active">
+  <div class="splash-inner">
+    <div class="splash-icon-wrap">
+      <!-- The Miut mark: envelope + M chevron + chat tail -->
+      <svg class="splash-icon" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="68" height="56" rx="9"
+              stroke="#4ecdc4" stroke-width="6.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 22 L44 46 L78 22"
+              stroke="#4ecdc4" stroke-width="6.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M52 66 L44 80 L68 66"
+              stroke="#4ecdc4" stroke-width="6.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <!-- Loading ring — same stroke weight and colour as the icon -->
+      <svg class="splash-ring" viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="54" cy="54" r="48"
+                stroke="#4ecdc4" stroke-width="4.5"
+                stroke-linecap="round"
+                stroke-dasharray="301.6"
+                stroke-dashoffset="220"/>
+      </svg>
+    </div>
+    <h1 class="splash-name">Miut</h1>
+  </div>
+</div>
+
+<!-- JOIN ─────────────────────────────────────── -->
+<div id="join-screen" class="screen">
+  <div class="join-wrap">
+
+    <div class="join-header">
+      <svg class="join-logo" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="68" height="56" rx="9"
+              stroke="#4ecdc4" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M10 22 L44 46 L78 22" stroke="#4ecdc4" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M52 66 L44 80 L68 66" stroke="#4ecdc4" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <h2 class="join-appname">Miut</h2>
+        <p class="join-tag">Encrypted · Code-locked · No accounts</p>
+      </div>
+    </div>
+
+    <div class="join-card">
+      <div class="field">
+        <label class="field-lbl">Your name <span class="opt">optional</span></label>
+        <input class="field-input" id="input-name" type="text"
+               placeholder="Leave blank to stay anonymous"
+               maxlength="24" autocomplete="off" />
+      </div>
+
+      <div class="seg-ctrl">
+        <button class="seg-btn active" data-tab="create" onclick="switchJoinTab('create')">Create room</button>
+        <button class="seg-btn" data-tab="enter" onclick="switchJoinTab('enter')">Enter room</button>
+      </div>
+
+      <!-- Create tab -->
+      <div class="tab-panel active" id="tab-create">
+        <div class="field">
+          <label class="field-lbl">Room code <span class="opt">— your encryption key</span></label>
+          <div class="input-row">
+            <input class="field-input" id="input-create-code" type="text"
+                   placeholder="e.g. Miut#42"
+                   data-placeholders='["e.g. Miut#42","e.g. Flash99","e.g. Alpha#7","e.g. Nova21"]'
+                   maxlength="32" autocomplete="off" spellcheck="false"
+                   oninput="updateEntropyMeter(this.value)" />
+            <button class="eye-btn" id="create-eye-btn"
+                    onclick="toggleVis('input-create-code','create-eye-btn')" type="button">
+              <svg class="eye-open" viewBox="0 0 20 20" fill="none" width="16" height="16">
+                <ellipse cx="10" cy="10" rx="7" ry="4.5" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="10" cy="10" r="2" fill="currentColor"/>
+              </svg>
+              <svg class="eye-closed" viewBox="0 0 20 20" fill="none" width="16" height="16" style="display:none">
+                <path d="M3 3l14 14M8.5 8.7A2 2 0 0012 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M5.5 5.9C4.2 7 3.3 8.4 3 10c1.3 4 7 6 7 6s2.6-.9 4.6-2.6M16.7 13.3C17.5 12.3 18 11.2 18 10c-1.3-4-7-6-7-6-.9 0-1.8.2-2.6.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <p class="field-hint warn">⚠ Write this down — it cannot be recovered. Share it privately.</p>
+          <div class="entropy-wrap" id="entropy-wrap" style="display:none">
+            <div class="entropy-track"><div class="entropy-fill" id="entropy-fill"></div></div>
+            <span class="entropy-lbl" id="entropy-label"></span>
+          </div>
+        </div>
+        <div class="info-row">
+          <svg viewBox="0 0 16 16" fill="none" width="13" height="13" style="flex-shrink:0;color:var(--teal)">
+            <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M8 7.5v3.5M8 5.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>Only people with this code can read messages.</span>
+        </div>
+        <button class="btn-primary" id="btn-create" onclick="handleCreate()">
+          <span>Create room</span>
+        </button>
+      </div>
+
+      <!-- Enter tab -->
+      <div class="tab-panel" id="tab-enter">
+        <div class="field">
+          <label class="field-lbl">Room code</label>
+          <div class="input-row">
+            <input class="field-input" id="input-room-code" type="text"
+                   placeholder="Enter the room code"
+                   maxlength="32" autocomplete="off" spellcheck="false" />
+            <button class="eye-btn" id="enter-eye-btn"
+                    onclick="toggleVis('input-room-code','enter-eye-btn')" type="button">
+              <svg class="eye-open" viewBox="0 0 20 20" fill="none" width="16" height="16">
+                <ellipse cx="10" cy="10" rx="7" ry="4.5" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="10" cy="10" r="2" fill="currentColor"/>
+              </svg>
+              <svg class="eye-closed" viewBox="0 0 20 20" fill="none" width="16" height="16" style="display:none">
+                <path d="M3 3l14 14M8.5 8.7A2 2 0 0012 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M5.5 5.9C4.2 7 3.3 8.4 3 10c1.3 4 7 6 7 6s2.6-.9 4.6-2.6M16.7 13.3C17.5 12.3 18 11.2 18 10c-1.3-4-7-6-7-6-.9 0-1.8.2-2.6.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <p class="field-hint">Enter the exact code shared by the room creator</p>
+        </div>
+        <button class="btn-primary" id="btn-enter" onclick="handleEnter()">
+          <span>Enter room</span>
+        </button>
+      </div>
+
+      <div id="join-error" class="error-msg"></div>
+    </div>
+
+    <p class="join-footer">🔒 End-to-end encrypted · No accounts · No data stored</p>
+  </div>
+</div>
+
+<!-- WAITING ──────────────────────────────────── -->
+<div id="waiting-screen" class="screen">
+  <div class="waiting-wrap">
+    <div class="waiting-pulse"></div>
+    <div class="avatar waiting-avatar" id="waiting-avatar"></div>
+    <h2 class="waiting-title">Waiting for approval</h2>
+    <p id="waiting-name" class="waiting-name"></p>
+    <div class="waiting-room-row">
+      <svg viewBox="0 0 16 16" fill="none" width="12" height="12" style="flex-shrink:0">
+        <rect x="2" y="7" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <span id="waiting-room-code"></span>
+    </div>
+    <p class="waiting-hint">The admin will see your request. Keep this screen open.</p>
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+    <button class="btn-ghost" onclick="cancelJoinRequest()">Cancel request</button>
+  </div>
+</div>
+
+<!-- INVITE ───────────────────────────────────── -->
+<div id="invite-screen" class="screen">
+  <div class="invite-wrap">
+    <svg class="invite-logo" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="68" height="56" rx="9"
+            stroke="#4ecdc4" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M10 22 L44 46 L78 22" stroke="#4ecdc4" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M52 66 L44 80 L68 66" stroke="#4ecdc4" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p class="invite-eyebrow">You've been invited to Miut</p>
+    <h2 class="invite-title">Enter the room code to join</h2>
+    <p class="invite-sub">Ask the person who shared this link for the room code.</p>
+    <div class="input-row" style="max-width:320px;margin:0 auto 4px">
+      <input class="field-input" id="invite-code-input" type="password"
+             placeholder="Room code"
+             autocomplete="off" spellcheck="false"
+             oninput="checkInviteCode(this)"
+             onkeydown="if(event.key==='Enter') joinFromInvite()" />
+      <button class="eye-btn" id="invite-vis-btn"
+              onclick="toggleVis('invite-code-input','invite-vis-btn')" type="button">
+        <svg class="eye-open" viewBox="0 0 20 20" fill="none" width="14" height="14">
+          <path d="M1 10s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+        </svg>
+        <svg class="eye-closed" viewBox="0 0 20 20" fill="none" width="14" height="14" style="display:none">
+          <path d="M2 2l16 16M7.5 7.6A4 4 0 0013.4 13M4.2 4.4C2.6 5.8 1 8 1 10c0 0 3.5 6 9 6a9 9 0 004.8-1.4M8 4.1A9 9 0 0119 10s-.7 1.4-2 2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div id="invite-error" class="error-msg" style="max-width:320px;margin:0 auto 8px"></div>
+    <button class="btn-primary" id="invite-join-btn" onclick="joinFromInvite()" disabled style="max-width:320px">
+      <span>Join room</span>
+    </button>
+    <button class="btn-text" onclick="cancelInvite()">← Cancel</button>
+  </div>
+</div>
+
+<!-- APP ─────────────────────────────────────── -->
+<div id="app" class="screen">
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand">
+        <svg viewBox="0 0 44 44" fill="none" width="26" height="26">
+          <rect x="4" y="4" width="36" height="30" rx="5"
+                stroke="#4ecdc4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 11 L22 24 L40 11" stroke="#4ecdc4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M26 34 L22 42 L34 34" stroke="#4ecdc4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="sidebar-appname">Miut</span>
+        <span class="room-pill" id="room-code-pill" onclick="copyRoomCode()" title="Tap to copy">····</span>
+      </div>
+      <div class="sidebar-btns">
+        <button class="icon-btn" onclick="shareRoomLink()" title="Share" id="share-room-btn">
+          <svg viewBox="0 0 20 20" fill="none" width="15" height="15">
+            <circle cx="15" cy="4" r="2" stroke="currentColor" stroke-width="1.4"/>
+            <circle cx="15" cy="16" r="2" stroke="currentColor" stroke-width="1.4"/>
+            <circle cx="5" cy="10" r="2" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M7 9l6-3.5M7 11l6 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button class="icon-btn gear-btn" onclick="openSettings()" title="Settings" id="settings-btn">
+          <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
+            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="my-profile">
+      <div class="avatar-wrap">
+        <div class="avatar" id="my-avatar-sidebar"></div>
+        <div class="status-dot online"></div>
+      </div>
+      <div>
+        <div class="profile-name" id="my-name-sidebar">You</div>
+        <div class="profile-status">Online</div>
+      </div>
+      <div id="my-admin-badge" class="admin-badge" style="display:none">Admin</div>
+    </div>
+
+    <div class="section-head">Members <span id="online-count" class="count-chip"></span></div>
+    <div id="members-list" class="members-list"></div>
+
+    <div class="sidebar-foot">
+      <button class="btn-leave" onclick="handleLogout()">
+        <svg viewBox="0 0 20 20" fill="none" width="13" height="13" style="flex-shrink:0">
+          <path d="M13 10H3M5 7l-3 3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M9 4h6a1 1 0 011 1v10a1 1 0 01-1 1H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Leave room
+      </button>
+    </div>
+  </aside>
+
+  <main id="main-area" class="main-area">
+    <header class="chat-header" id="chat-header">
+      <div class="chat-left">
+        <div class="room-avatar">
+          <svg viewBox="0 0 44 44" fill="none" width="18" height="18">
+            <rect x="4" y="4" width="36" height="30" rx="5" stroke="#4ecdc4" stroke-width="4" stroke-linecap="round"/>
+            <path d="M4 11 L22 24 L40 11" stroke="#4ecdc4" stroke-width="4" stroke-linecap="round"/>
+            <path d="M26 34 L22 42 L34 34" stroke="#4ecdc4" stroke-width="4" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="chat-name" id="chat-name">Room</div>
+          <div class="chat-status">
+            <span class="online-dot"></span>
+            <span id="member-status-text">0 members</span>
+          </div>
+        </div>
+      </div>
+      <div class="chat-right">
+        <button class="icon-btn" onclick="copyRoomCode()" title="Copy code">
+          <svg viewBox="0 0 20 20" fill="none" width="15" height="15">
+            <rect x="7" y="7" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M13 7V5a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="search-btn" onclick="toggleSearch()" title="Search">
+          <svg viewBox="0 0 20 20" fill="none" width="15" height="15">
+            <circle cx="8.5" cy="8.5" r="5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M13 13l3.5 3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="search-bar" class="search-bar" style="display:none">
+      <svg viewBox="0 0 20 20" fill="none" width="14" height="14" style="flex-shrink:0;color:var(--text2)">
+        <circle cx="8.5" cy="8.5" r="5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M13 13l3.5 3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+      <input type="text" placeholder="Search messages…"
+             oninput="doSearch(this.value)"
+             onkeydown="if(event.key==='Escape')toggleSearch()"
+             autocomplete="off" />
+      <span id="search-count" class="search-count"></span>
+      <button class="icon-btn" onclick="toggleSearch()">
+        <svg viewBox="0 0 20 20" fill="none" width="12" height="12">
+          <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <div id="messages-area" class="messages-area">
+      <div class="room-welcome" id="room-welcome">
+        <svg class="welcome-mark" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="10" y="10" width="68" height="56" rx="9"
+                stroke="#4ecdc4" stroke-width="5.5" opacity="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 22 L44 46 L78 22" stroke="#4ecdc4" stroke-width="5.5" opacity="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M52 66 L44 80 L68 66" stroke="#4ecdc4" stroke-width="5.5" opacity="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="welcome-room" id="welcome-room-name">Room</p>
+        <p class="welcome-sub">End-to-end encrypted. Only people with the room code can read messages.</p>
+        <p class="welcome-enc">🔒 Zero-knowledge · No accounts</p>
+      </div>
+      <button id="scroll-fab" class="scroll-fab" style="display:none" aria-label="Scroll to bottom">
+        <svg viewBox="0 0 20 20" fill="none" width="15" height="15">
+          <path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span id="scroll-fab-badge" class="fab-badge"></span>
+      </button>
+    </div>
+
+    <div id="typing-indicator" class="typing-indicator" style="display:none">
+      <span></span><span></span><span></span>
+      <div id="typing-text" class="typing-text"></div>
+    </div>
+
+    <div id="reply-bar" class="reply-bar" style="display:none">
+      <div class="reply-accent"></div>
+      <div class="reply-content">
+        <div id="reply-sender" class="reply-sender"></div>
+        <div id="reply-preview" class="reply-preview"></div>
+      </div>
+      <button class="icon-btn" onclick="clearReply()" aria-label="Cancel">
+        <svg viewBox="0 0 20 20" fill="none" width="13" height="13">
+          <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <div id="solo-hint" class="solo-hint" style="display:none">
+      Share <strong id="solo-code"></strong> to invite others
+    </div>
+
+    <div class="input-area" id="input-area">
+      <button class="icon-btn attach-btn" onclick="triggerAttach()" title="Attach">
+        <svg viewBox="0 0 20 20" fill="none" width="18" height="18">
+          <path d="M16.5 10.5l-6.3 6.3a4.24 4.24 0 01-6-6l7-7a2.83 2.83 0 014 4l-7.1 7.1a1.41 1.41 0 01-2-2l6.3-6.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="textarea-wrap">
+        <textarea id="msg-input" placeholder="Message (encrypted)…"
+                  rows="1" onkeydown="handleKey(event)" oninput="handleTyping(this)"></textarea>
+      </div>
+      <button class="send-btn" id="send-btn" aria-label="Send">
+        <svg viewBox="0 0 20 20" fill="none" width="17" height="17">
+          <path d="M17.5 2.5L9 11M17.5 2.5L12 17.5l-3-6.5-6.5-3L17.5 2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </main>
+</div>
+
+<!-- SETTINGS ─────────────────────────────────── -->
+<div id="settings-modal" class="modal-bg" style="display:none" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Settings</h3>
+      <button class="icon-btn" onclick="closeSettings()">
+        <svg viewBox="0 0 20 20" fill="none" width="15" height="15">
+          <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="setting-row" id="approval-setting-row" style="display:none">
+        <div><div class="setting-lbl">Approval gate</div><div class="setting-sub">Require admin approval for new members</div></div>
+        <div class="toggle-wrap"><input type="checkbox" id="approval-toggle" onchange="toggleApprovalGate()" /><label for="approval-toggle" class="toggle"></label></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-lbl">Sound alerts</div>
+        <div class="toggle-wrap"><input type="checkbox" id="sound-toggle" checked onchange="toggleSoundAlerts()" /><label for="sound-toggle" class="toggle"></label></div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-lbl">Animations</div>
+        <div class="toggle-wrap"><input type="checkbox" id="anim-toggle" checked onchange="toggleAnimations()" /><label for="anim-toggle" class="toggle"></label></div>
+      </div>
+      <div class="setting-divider"></div>
+      <div class="setting-row"><div class="setting-lbl">App</div><span class="setting-val">Miut v1.0</span></div>
+      <div class="setting-row"><div class="setting-lbl">Encryption</div><span class="setting-val teal">AES-256-GCM ✓</span></div>
+      <div class="setting-row"><div class="setting-lbl">Signing</div><span class="setting-val teal">ECDSA P-256 ✓</span></div>
+      <div class="setting-row"><div class="setting-lbl">Key epoch</div><span class="setting-val teal" id="epoch-display">0</span></div>
+      <div class="setting-row" id="rotate-key-row" style="display:none">
+        <div><div class="setting-lbl">Rotate key</div><div class="setting-sub">Future messages use a fresh derived key</div></div>
+        <button class="btn-sm" onclick="rotateKey(); closeSettings();">Rotate</button>
+      </div>
+      <button class="btn-primary" onclick="saveSettings()" style="margin-top:16px"><span>Save settings</span></button>
+      <div class="setting-row" id="install-app-row" style="display:none;margin-top:8px">
+        <div><div class="setting-lbl">Install app</div><div class="setting-sub">Add Miut to home screen</div></div>
+        <button class="btn-sm" onclick="triggerPWAInstall()">Install</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="media-viewer" class="media-viewer" style="display:none" onclick="closeMediaViewer()">
+  <button class="mv-close" onclick="closeMediaViewer()">
+    <svg viewBox="0 0 20 20" fill="none" width="18" height="18">
+      <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+  <img id="mv-img" src="" alt="" style="display:none" />
+  <video id="mv-video" controls style="display:none"></video>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<input type="file" id="file-input"
+       accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+       style="display:none" onchange="handleFileAttach(event)" />
+
+<!-- Firebase compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="db-manager.js"></script>
+<script src="app.js"></script>
+<script src="sw-bridge.js"></script>
+<script>
+(function() {
+  function init() {
+    document.querySelectorAll('[data-placeholders]').forEach(el => {
+      const list = JSON.parse(el.dataset.placeholders || '[]');
+      if (!list.length) return;
+      let i = 0;
+      setInterval(() => {
+        if (document.activeElement === el || el.value) return;
+        el.style.opacity = '0';
+        setTimeout(() => { i = (i+1) % list.length; el.placeholder = list[i]; el.style.opacity = ''; }, 200);
+      }, 2800);
+    });
+  }
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
+})();
+</script>
+</body>
+</html>
