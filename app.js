@@ -575,7 +575,7 @@ const _ERROR_MAP = {
   'network-request-failed':   { title: 'No internet connection', detail: 'You appear to be offline.',                     icon: '📶', type: 'network'     },
   'deadline-exceeded':        { title: 'Request timed out',      detail: 'Server took too long — try again.',             icon: '⏱',  type: 'network'     },
   'resource-exhausted':       { title: 'Server busy',            detail: 'Quota exceeded. Try again in a few minutes.',   icon: '⚠',  type: 'quota'       },
-  'permission-denied':        { title: 'Access denied',          detail: 'You don't have permission for this action.',   icon: '🔒', type: 'permission'  },
+  'permission-denied':        { title: 'Access denied',          detail: "You don't have permission for this action.",   icon: '🔒', type: 'permission'  },
   'unauthenticated':          { title: 'Not signed in',          detail: 'Reload the page and try again.',                icon: '🔑', type: 'auth'        },
   'not-found':                { title: 'Room not found',         detail: 'The room may have been closed.',                icon: '🔍', type: 'notfound'    },
   'already-exists':           { title: 'Already exists',         detail: 'A room with this code already exists.',         icon: '♻',  type: 'notfound'    },
@@ -611,7 +611,7 @@ function _classifyError(e) {
   if (raw.includes('quota') || raw.includes('resource'))
     return { title: 'Server busy', detail: 'Try again in a few minutes.', icon: '⚠', type: 'quota' };
   if (raw.includes('permission') || raw.includes('forbidden') || raw.includes('unauthorized'))
-    return { title: 'Access denied', detail: 'You don't have permission.', icon: '🔒', type: 'permission' };
+    return { title: 'Access denied', detail: "You don't have permission.", icon: '🔒', type: 'permission' };
 
   return { title: 'Connection error', detail: 'Check your connection and try again.', icon: '📡', type: 'unknown' };
 }
@@ -3144,7 +3144,7 @@ function triggerPWAInstall() {
     /* Hide install button in settings */
     const row = $('install-app-row');
     if (row) row.style.display = 'none';
-  });
+  }).catch(() => {});
 }
 
 window.addEventListener('beforeinstallprompt', e => {

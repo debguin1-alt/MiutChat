@@ -433,11 +433,16 @@
       const list = JSON.parse(el.dataset.placeholders || '[]');
       if (!list.length) return;
       let i = 0;
-      setInterval(() => {
+      const timer = setInterval(() => {
         if (document.activeElement === el || el.value) return;
         el.style.opacity = '0';
-        setTimeout(() => { i = (i+1) % list.length; el.placeholder = list[i]; el.style.opacity = ''; }, 200);
+        setTimeout(() => {
+          i = (i + 1) % list.length;
+          el.placeholder = list[i];
+          el.style.opacity = '1';
+        }, 200);
       }, 2800);
+      el._placeholderTimer = timer;
     });
   }
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
