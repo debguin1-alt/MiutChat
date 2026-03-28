@@ -43,7 +43,7 @@ const CONFIG = {
 
 
   CHUNK_BYTES:        700 * 1024,  // 700KB raw → ~933KB base64 → safely under Firestore 1MB doc limit
-  IDB_NAME:           'nexus-v1',
+  IDB_NAME:           'miut-v1',
   IDB_VER:            2,
   EDIT_WINDOW_MS:     2 * 60 * 1000,
 };
