@@ -317,12 +317,12 @@ async function navigationHandler(req) {
     // Last resort: offline page
     const offline = await cache.match('/offline.html');
     return offline || new Response(
-      `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Miut · Offline</title>
+      `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>NEXUS · Offline</title>
       <meta name="viewport" content="width=device-width,initial-scale=1">
       <style>*{box-sizing:border-box;margin:0;padding:0}body{background:#0d1a1a;color:#4ecdc4;font-family:'Space Mono',monospace;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:24px}.wrap{display:flex;flex-direction:column;gap:16px;align-items:center}.hex{font-size:3rem;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}h1{font-size:1.4rem;letter-spacing:6px}p{font-size:.75rem;color:#6a9896;line-height:1.7}</style>
       </head><body><div class="wrap">
         <div class="hex">⬡</div>
-        <h1>Miut</h1>
+        <h1>NEXUS</h1>
         <p>You are currently offline.<br/>Reconnect to access your rooms.</p>
       </div></body></html>`,
       { status: 503, headers: { 'Content-Type': 'text/html' } }
@@ -422,7 +422,7 @@ self.addEventListener('periodicsync', event => {
    PUSH NOTIFICATIONS — rich with actions
 ══════════════════════════════════════════ */
 self.addEventListener('push', event => {
-  let data = { title: 'Miut', body: 'New message received', type: 'message' };
+  let data = { title: 'NEXUS', body: 'New message received', type: 'message' };
 
   try {
     if (event.data) data = { ...data, ...event.data.json() };

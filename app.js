@@ -3132,13 +3132,13 @@ let _deferredInstall = null;
 
 function triggerPWAInstall() {
   if (!_deferredInstall) {
-    toast('Already installed', 'Miut is already on your home screen.', '✓');
+    toast('Already installed', 'Miut Chat is already on your home screen.', '✓');
     return;
   }
   _deferredInstall.prompt();
   _deferredInstall.userChoice.then(choice => {
     if (choice.outcome === 'accepted') {
-      toast('Miut installed!', 'Find it on your home screen.', '✓');
+      toast('Miut Chat installed!', 'Find it on your home screen.', '✓');
     }
     _deferredInstall = null;
     /* Hide install button in settings */
@@ -3155,7 +3155,7 @@ window.addEventListener('beforeinstallprompt', e => {
   if (row) row.style.display = 'flex';
   /* Show tap-to-install toast after 3 seconds */
   setTimeout(() => {
-    const t = toast('Install Miut', 'Tap to add it to your home screen.', '📲');
+    const t = toast('Install Miut Chat', 'Tap to add it to your home screen.', '📲');
     if (t) {
       t.style.cursor = 'pointer';
       /* Remove default dismiss, replace with install trigger */
@@ -3170,5 +3170,5 @@ window.addEventListener('appinstalled', () => {
   _deferredInstall = null;
   const row = $('install-app-row');
   if (row) row.style.display = 'none';
-  toast('Miut installed!', 'Find it on your home screen.', '✓');
+  toast('Miut Chat installed!', 'Find it on your home screen.', '✓');
 });
