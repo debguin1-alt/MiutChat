@@ -776,7 +776,7 @@ function loadRoom()    { return localStorage.getItem(CONFIG.ROOM_KEY); }
 
 window.addEventListener('DOMContentLoaded', () => {
   // Start anonymous auth immediately — warm up the JWT before any room action.
-  ensureAuth().catch(err => console.warn('[Miut] Initial auth failed:', err.message));
+  ensureAuth().catch(err => console.warn('[Miut Chat] Initial auth failed:', err.message));
 
   // Prefs
   try {
@@ -1569,7 +1569,7 @@ function startChatListeners() {
         playSound('receive');
         if (document.hidden) {
           _unreadCount++;
-          document.title = `(${_unreadCount}) Miut`;
+          document.title = `(${_unreadCount}) Miut Chat`;
         }
         showScrollFab();
       }
@@ -1781,7 +1781,7 @@ document.addEventListener('visibilitychange', () => {
     .update({ online }).catch(() => {});
   if (online) {
     _unreadCount = 0;
-    document.title = 'Miut';
+    document.title = 'Miut Chat';
     stopChatListeners(); startChatListeners();
   }  // re-sync on tab focus
 });
@@ -2734,7 +2734,7 @@ function scrollBottom() {
     a.scrollTop = a.scrollHeight;
     hideScrollFab();
     _unreadCount = 0;
-    document.title = 'Miut';
+    document.title = 'Miut Chat';
   });
 }
 
@@ -2769,7 +2769,7 @@ function shareRoomLink() {
 
   if (navigator.share) {
     navigator.share({
-      title: 'Join my Miut room',
+      title: 'Join my Miut Chat room',
       text:  'Tap to join — you\'ll need the room code to get in.',
       url,
     }).catch(() => {});
@@ -3073,11 +3073,25 @@ function updateActionBtn() {
 function setupActionBtn() {
   const btn = $('send-btn');
   if (!btn) return;
-  btn.addEventListener('click', () => { sendMessage(); });
+  btn.addEventListener('click', () => { _animateSend(); sendMessage(); });
   btn.addEventListener('touchstart', e => {
     e.preventDefault();
-    sendMessage();
+    _animateSend(); sendMessage();
   }, { passive: false });
+}
+
+function _animateSend() {
+  const btn = $('send-btn');
+  if (!btn || !state.prefs.animations) return;
+  btn.style.transition = 'transform .06s ease';
+  btn.style.transform = 'scale(.82)';
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      btn.style.transition = 'transform .28s cubic-bezier(.34,1.56,.64,1)';
+      btn.style.transform = '';
+      setTimeout(() => { btn.style.transition = ''; }, 300);
+    }, 70);
+  });
 }
 
 function handleRipple(e) {

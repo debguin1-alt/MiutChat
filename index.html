@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Miut Chat" />
   <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
@@ -26,18 +26,17 @@
   <div class="splash-bg"></div>
   <div class="splash-content">
     <div class="logo-hex nx-anim" style="--nx-d:0.1s">
-      <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" class="miut-logo-splash">
-        <circle cx="60" cy="60" r="55" stroke="var(--teal)" stroke-width="1.5" opacity="0.15" class="hex-outline"/>
-        <circle cx="60" cy="60" r="46" fill="var(--teal)" opacity="0.07"/>
-        <path d="M21 40 C21 37 23.2 35 26 35 L94 35 C96.8 35 99 37 99 40 L99 72 C99 75 96.8 77 94 77 L64 77 L59 84 L54 77 L26 77 C23.2 77 21 75 21 72 Z" stroke="var(--teal)" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
-        <path d="M29 68 L29 43 L44 61 L60 43 L76 61 L91 43 L91 68" stroke="var(--teal)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <line x1="37" y1="35" x2="51" y2="77" stroke="var(--teal)" stroke-width="1.5" opacity="0.25" stroke-linecap="round"/>
-        <line x1="83" y1="35" x2="69" y2="77" stroke="var(--teal)" stroke-width="1.5" opacity="0.25" stroke-linecap="round"/>
-      </svg>
+      <div class="miut-logo-ring-wrap">
+        <svg class="miut-ring-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <circle class="miut-ring-track" cx="60" cy="60" r="54" fill="none" stroke="var(--teal)" stroke-width="2" opacity="0.12"/>
+          <circle class="miut-ring-spin" cx="60" cy="60" r="54" fill="none" stroke="var(--teal)" stroke-width="2.5"
+                  stroke-linecap="round" stroke-dasharray="80 260"/>
+        </svg>
+        <img src="icons/icon-192.png" alt="Miut Chat" class="miut-logo-splash-img" />
+      </div>
     </div>
     <h1 class="splash-title nx-anim" style="--nx-d:0.22s">Miut Chat</h1>
     <p class="splash-sub nx-anim" style="--nx-d:0.32s">End-to-end encrypted · Private · Secure</p>
-    <div class="splash-dots nx-anim" style="--nx-d:0.42s"><span></span><span></span><span></span></div>
   </div>
 </div>
 
@@ -47,11 +46,7 @@
 
     <div class="join-header nx-anim" style="--nx-d:0.05s">
       <div class="logo-sm">
-        <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" class="miut-logo-sm">
-          <circle cx="30" cy="30" r="27" fill="var(--teal)" opacity="0.12"/>
-          <path d="M11 20 C11 17.8 12.8 16 15 16 L45 16 C47.2 16 49 17.8 49 20 L49 36 C49 38.2 47.2 40 45 40 L32 40 L29 44.5 L26 40 L15 40 C12.8 40 11 38.2 11 36 Z" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linejoin="round"/>
-          <path d="M17 34 L17 22 L24 31 L30 22 L36 31 L43 22 L43 34" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <img src="icons/icon-192.png" alt="Miut Chat" class="miut-logo-sm-img" />
       </div>
       <h2>Miut Chat</h2>
       <p>Private group chat · Code-locked · No sign-in</p>
@@ -230,11 +225,7 @@
   <div class="invite-bg"></div>
   <div class="invite-container">
     <div class="invite-logo">
-      <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" class="miut-logo-sm" width="52" height="52">
-          <circle cx="30" cy="30" r="27" fill="var(--teal)" opacity="0.12"/>
-          <path d="M11 20 C11 17.8 12.8 16 15 16 L45 16 C47.2 16 49 17.8 49 20 L49 36 C49 38.2 47.2 40 45 40 L32 40 L29 44.5 L26 40 L15 40 C12.8 40 11 38.2 11 36 Z" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linejoin="round"/>
-          <path d="M17 34 L17 22 L24 31 L30 22 L36 31 L43 22 L43 34" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+      <img src="icons/icon-192.png" alt="Miut Chat" class="miut-logo-sm-img" style="width:52px;height:52px" />
     </div>
     <p class="invite-label">YOU'VE BEEN INVITED TO MIUT CHAT</p>
     <h2 class="invite-title">Enter the room code<br/>to join</h2>
@@ -261,11 +252,7 @@
   <aside id="sidebar" class="sidebar">
     <div class="sidebar-header nx-anim" style="--nx-d:0.05s">
       <div class="logo-sm">
-        <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" class="miut-logo-sm">
-          <circle cx="30" cy="30" r="27" fill="var(--teal)" opacity="0.12"/>
-          <path d="M11 20 C11 17.8 12.8 16 15 16 L45 16 C47.2 16 49 17.8 49 20 L49 36 C49 38.2 47.2 40 45 40 L32 40 L29 44.5 L26 40 L15 40 C12.8 40 11 38.2 11 36 Z" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linejoin="round"/>
-          <path d="M17 34 L17 22 L24 31 L30 22 L36 31 L43 22 L43 34" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <img src="icons/icon-192.png" alt="Miut Chat" class="miut-logo-sm-img" />
       </div>
       <div class="sidebar-title-wrap">
         <span class="app-name">Miut Chat</span>
@@ -330,13 +317,15 @@
 
     <div class="chat-header" id="chat-header">
 
+      <button class="icon-btn hamburger-btn ripple-btn" id="hamburger-btn" onclick="toggleSidebar()" title="Menu" aria-label="Open menu">
+        <svg viewBox="0 0 20 20" fill="none" width="18" height="18">
+          <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </button>
+
       <div class="chat-header-info">
         <div class="group-avatar">
-          <svg viewBox="0 0 32 32" fill="none" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="8" fill="var(--teal)" opacity="0.12"/>
-            <path d="M5 11 C5 9.3 6.3 8 8 8 L24 8 C25.7 8 27 9.3 27 11 L27 20 C27 21.7 25.7 23 24 23 L18 23 L16 25.5 L14 23 L8 23 C6.3 23 5 21.7 5 20 Z" stroke="var(--teal)" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
-            <path d="M9 20 L9 12 L13 17 L16 12 L19 17 L23 12 L23 20" stroke="var(--teal)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <img src="icons/icon-192.png" alt="Miut Chat" />
         </div>
         <div>
           <div class="chat-name" id="chat-name">GROUP ROOM</div>
@@ -379,24 +368,19 @@
     <div id="messages-area" class="messages-area">
       <div class="room-welcome" id="room-welcome">
         <div class="welcome-icon">
-          <svg viewBox="0 0 80 80" fill="none" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="40" cy="40" r="38" stroke="var(--teal)" stroke-width="1" fill="none" opacity="0.2"/>
-            <circle cx="40" cy="40" r="32" fill="var(--teal)" opacity="0.06"/>
-            <path d="M12 28 C12 25.2 14.2 23 17 23 L63 23 C65.8 23 68 25.2 68 28 L68 50 C68 52.8 65.8 55 63 55 L44 55 L40 60 L36 55 L17 55 C14.2 55 12 52.8 12 50 Z" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linejoin="round" opacity="0.7"/>
-            <path d="M20 47 L20 30 L30 42 L40 30 L50 42 L60 30 L60 47" stroke="var(--teal)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
-          </svg>
+          <img src="icons/icon-192.png" alt="Miut Chat" class="welcome-logo-img" />
         </div>
         <p class="welcome-title" id="welcome-room-name">ROOM</p>
         <p class="welcome-sub">Messages are end-to-end encrypted — only people with your room code can read them. Share the code to invite others.</p>
         <div class="enc-note">🔒 End-to-end encrypted · Zero-knowledge · No accounts</div>
       </div>
-      <button id="scroll-fab" class="scroll-fab" style="display:none" aria-label="Scroll to bottom">
-        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-          <path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span id="scroll-fab-badge" class="scroll-fab-badge"></span>
-      </button>
     </div>
+    <button id="scroll-fab" class="scroll-fab" aria-label="Scroll to bottom">
+      <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+        <path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span id="scroll-fab-badge" class="scroll-fab-badge"></span>
+    </button>
 
     <div id="typing-indicator" class="typing-indicator" style="display:none">
       <span></span><span></span><span></span>
@@ -545,6 +529,8 @@
   <video id="mv-video" controls style="display:none"></video>
 </div>
 
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
 <div id="toast-container" class="toast-container"></div>
 
 <input type="file" id="file-input"
@@ -556,7 +542,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
 <!-- Firebase config is hardcoded in app.js (domain-restricted API keys) -->
 <script src="db-manager.js"></script>
-  <script src="app.js"></script>
+<script src="app.js"></script>
 <script src="sw-bridge.js"></script>
 <script>
 (function () {

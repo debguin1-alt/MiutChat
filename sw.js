@@ -41,7 +41,7 @@ const PRECACHE_REQUIRED = [
   '/Miut/app.js',
   '/Miut/sw-bridge.js',
   '/Miut/manifest.json',
-  '/Miut/config.js',
+
 ];
 
 // Everything here is silently skipped if missing — icons not committed yet, etc.
