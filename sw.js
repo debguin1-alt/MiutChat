@@ -14,7 +14,7 @@
 /* ──────────────────────────────────────────
    VERSIONS & CACHE NAMES
 ────────────────────────────────────────── */
-const SW_VERSION      = '1.0.0';
+const SW_VERSION      = '1.1.0';
 const CACHE_SHELL     = `miut-shell-v${SW_VERSION}`;    // App shell (never stale)
 const CACHE_STATIC    = `miut-static-v${SW_VERSION}`;   // Fonts, icons (long-lived)
 const CACHE_RUNTIME   = `miut-runtime-v${SW_VERSION}`;  // Firebase responses, etc.

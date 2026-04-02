@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self';" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <meta http-equiv="Referrer-Policy" content="no-referrer" />
+  <link rel="dns-prefetch" href="https://www.gstatic.com" />
+  <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
+  <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Miut Chat · Private Chat</title>
@@ -32,7 +38,7 @@
           <circle class="miut-ring-spin" cx="60" cy="60" r="54" fill="none" stroke="var(--teal)" stroke-width="2.5"
                   stroke-linecap="round" stroke-dasharray="80 260"/>
         </svg>
-        <img src="icons/icon-192.png" alt="Miut Chat" class="miut-logo-splash-img" />
+        <img src="icons/icon-192.png" alt="Miut Chat" class="miut-logo-splash-img" loading="eager" decoding="async" />
       </div>
     </div>
     <h1 class="splash-title nx-anim" style="--nx-d:0.22s">Miut Chat</h1>
@@ -128,7 +134,7 @@
           </svg>
           <span>All messages are encrypted using your code as the key. Only people who know the code can read them.</span>
         </div>
-        <button class="btn-join ripple-btn" onclick="handleCreate()">
+        <button class="btn-join ripple-btn" id="btn-create" onclick="handleCreate()">
           <span>CREATE ROOM</span>
           <div class="btn-shimmer"></div>
         </button>
@@ -162,7 +168,7 @@
           </div>
           <div class="code-hint">Enter the exact code the room creator shared with you</div>
         </div>
-        <button class="btn-join ripple-btn" onclick="handleEnter()">
+        <button class="btn-join ripple-btn" id="btn-enter" onclick="handleEnter()">
           <span>ENTER ROOM</span>
           <div class="btn-shimmer"></div>
         </button>
@@ -537,13 +543,12 @@
        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
        style="display:none" onchange="handleFileAttach(event)" />
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
-<!-- Firebase config is hardcoded in app.js (domain-restricted API keys) -->
-<script src="db-manager.js"></script>
-<script src="app.js"></script>
-<script src="sw-bridge.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
+<script src="db-manager.js" defer></script>
+<script src="app.js" defer></script>
+<script src="sw-bridge.js" defer></script>
 <script>
 (function () {
   function startRotatingPlaceholder(input) {

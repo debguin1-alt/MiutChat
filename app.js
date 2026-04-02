@@ -22,6 +22,9 @@ function validateRoomCode(code) {
   if (!code || typeof code !== 'string') {
     showError('Please enter a room code'); return false;
   }
+  // Reject codes with zero-width or homoglyph-prone chars
+  const cleaned = code.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '');
+  if (cleaned !== code) { showError('Room code contains invalid characters'); return false; }
   if (!_ROOM_CODE_RE.test(code)) {
     showError('Room code contains invalid characters. Use letters, numbers, spaces, or _ - @ # ! ? + * = .'); return false;
   }
@@ -55,19 +58,23 @@ let _authReady = null;
 async function ensureAuth() {
   if (_authReady) return _authReady;
   _authReady = new Promise((resolve, reject) => {
-    const authApp  = firebase.app('miut-db0');
-    const authInst = firebase.auth(authApp);
-    const unsub = authInst.onAuthStateChanged(user => {
-      unsub();
-      if (user) { resolve(user.uid); return; }
-      authInst.signInAnonymously()
-        .then(cred => resolve(cred.user.uid))
-        .catch(err => {
-          // Reset so the next call retries instead of getting a stuck rejected promise
-          _authReady = null;
-          reject(err);
-        });
-    });
+    try {
+      const authApp  = firebase.app('miut-db0');
+      const authInst = firebase.auth(authApp);
+      const unsub = authInst.onAuthStateChanged(user => {
+        unsub();
+        if (user) { resolve(user.uid); return; }
+        authInst.signInAnonymously()
+          .then(cred => resolve(cred.user.uid))
+          .catch(err => {
+            _authReady = null;
+            reject(err);
+          });
+      }, err => { _authReady = null; reject(err); });
+    } catch (err) {
+      _authReady = null;
+      reject(err);
+    }
   });
   return _authReady;
 }
@@ -582,6 +589,7 @@ const _ERROR_MAP = {
   'cancelled':                { title: 'Operation cancelled',    detail: 'The request was cancelled — try again.',        icon: '✗',  type: 'unknown'     },
   'internal':                 { title: 'Server error',           detail: 'An internal error occurred. Try again.',        icon: '⚡', type: 'unknown'     },
   'DB probe timeout':         { title: 'Connection timeout',     detail: 'Database took too long to respond.',            icon: '⏱',  type: 'network'     },
+  'auth/operation-not-allowed': { title: 'Anonymous sign-in disabled', detail: 'Enable Anonymous Auth in Firebase Console → Authentication → Sign-in method.', icon: '🔧', type: 'auth' },
   'auth/network-request-failed': { title: 'No internet',        detail: 'Cannot reach authentication servers.',          icon: '📶', type: 'network'     },
   'auth/too-many-requests':   { title: 'Too many attempts',      detail: 'Wait a moment before trying again.',            icon: '⛔', type: 'quota'       },
 };
@@ -616,31 +624,122 @@ function _classifyError(e) {
   return { title: 'Connection error', detail: 'Check your connection and try again.', icon: '📡', type: 'unknown' };
 }
 
-const _createRl = { count: 0, resetAt: 0 };
-const _enterRl  = { count: 0, resetAt: 0, wrongCount: 0, lockedUntil: 0 };
-
-/* How many wrong codes allowed before lockout */
+// ─── Persistent Rate Limiter ─────────────────────────────────────────────────
 const WRONG_CODE_LIMIT = 5;
+let   _countdownTimer  = null;
+// Uses localStorage so a page reload does NOT reset the counter.
+// Token-bucket: refills 1 token every REFILL_MS up to MAX_TOKENS.
+// Wrong-code lockout uses separate exponential backoff also persisted.
+const _RL_KEY    = 'miut_rl_v1';        // localStorage key
+const _RL_WRONG  = 'miut_rl_wrong_v1';  // wrong-code lockout key
 
-/* Live countdown timer handle */
-let _countdownTimer = null;
+function _loadRlState(key, defaults) {
+  try { return Object.assign({}, defaults, JSON.parse(localStorage.getItem(key) || '{}')); }
+  catch { return Object.assign({}, defaults); }
+}
+function _saveRlState(key, obj) {
+  try { localStorage.setItem(key, JSON.stringify(obj)); } catch {}
+}
+
+const _RL_CFG = {
+  create: { maxTokens: 5,  refillMs: 30000  },   // 5 creates per 30 s
+  enter:  { maxTokens: 10, refillMs: 60000  },   // 10 enters per 60 s
+  send:   { maxTokens: 20, refillMs: 10000  },   // 20 msgs per 10 s
+};
+
+function _consumeToken(type) {
+  const cfg  = _RL_CFG[type]; if (!cfg) return true;
+  const key  = `${_RL_KEY}_${type}`;
+  const now  = Date.now();
+  const st   = _loadRlState(key, { tokens: cfg.maxTokens, lastRefill: now });
+
+  // Refill proportionally to elapsed time
+  const elapsed = now - (st.lastRefill || now);
+  const refilled = Math.floor(elapsed / cfg.refillMs);
+  if (refilled > 0) {
+    st.tokens     = Math.min(cfg.maxTokens, (st.tokens || 0) + refilled);
+    st.lastRefill = now;
+  }
+
+  if (st.tokens <= 0) { _saveRlState(key, st); return false; }
+  st.tokens--;
+  _saveRlState(key, st);
+  return true;
+}
+
+function _getRlWaitMs(type) {
+  const cfg = _RL_CFG[type]; if (!cfg) return 0;
+  const key = `${_RL_KEY}_${type}`;
+  const now = Date.now();
+  const st  = _loadRlState(key, { tokens: cfg.maxTokens, lastRefill: now });
+  if ((st.tokens || 0) > 0) return 0;
+  const sinceRefill = now - (st.lastRefill || now);
+  return Math.max(0, cfg.refillMs - (sinceRefill % cfg.refillMs));
+}
 
 function checkRateLimit(type) {
-  const rl        = type === 'enter' ? _enterRl : _createRl;
-  const now       = Date.now();
-  const window_ms = type === 'enter' ? 60000 : 30000;
-  const max       = 5;
-  if (now > rl.resetAt) { rl.count = 0; rl.resetAt = now + window_ms; }
-  rl.count++;
-  if (rl.count > max) {
-    const remaining = rl.resetAt - now;
-    // Pass `type` so countdown targets the correct button (create vs enter).
-    _startCountdown(remaining, type);
-    showError('');
+  if (_consumeToken(type)) return true;
+  const waitMs = _getRlWaitMs(type);
+  _startCountdown(waitMs, type);
+  showError('');
+  return false;
+}
+
+// Wrong-code lockout — persisted across reloads
+function _loadWrongState() {
+  return _loadRlState(_RL_WRONG, { wrongCount: 0, lockedUntil: 0 });
+}
+function _saveWrongState(obj) { _saveRlState(_RL_WRONG, obj); }
+
+function _recordWrongCode() {
+  const now = Date.now();
+  const st  = _loadWrongState();
+  st.wrongCount = (st.wrongCount || 0) + 1;
+
+  if (st.wrongCount < WRONG_CODE_LIMIT) {
+    const left = WRONG_CODE_LIMIT - st.wrongCount;
+    const errEl = $('join-error') || $('invite-error');
+    if (errEl) {
+      errEl.textContent = left === 1
+        ? '⚠ Last attempt — you will be locked out after this'
+        : `🔑 Wrong code — ${left} attempt${left !== 1 ? 's' : ''} remaining`;
+      errEl.className = left === 1 ? 'error-msg error-urgent' : 'error-msg';
+    }
+    _saveWrongState(st);
+    return;
+  }
+
+  const backoffIndex = st.wrongCount - WRONG_CODE_LIMIT;
+  const waitMs = Math.min(30000 * Math.pow(2, backoffIndex), 8 * 60 * 1000);
+  st.lockedUntil = now + waitMs;
+  _saveWrongState(st);
+
+  const errEl = $('join-error') || $('invite-error');
+  if (errEl) errEl.textContent = '';
+  _startCountdown(waitMs, 'enter');
+}
+
+function _checkEnterLock() {
+  const now = Date.now();
+  const st  = _loadWrongState();
+  if ((st.lockedUntil || 0) > now) {
+    const remaining = st.lockedUntil - now;
+    if (!_countdownTimer) _startCountdown(remaining, 'enter');
     return false;
   }
   return true;
 }
+
+// Send-rate limit (in-memory only — resets on reload is acceptable for sends)
+const _sendRl = { count: 0, resetAt: 0 };
+function checkSendRateLimit() {
+  const now = Date.now();
+  if (now > _sendRl.resetAt) { _sendRl.count = 0; _sendRl.resetAt = now + 10000; }
+  _sendRl.count++;
+  if (_sendRl.count > 20) { toast('Slow down', 'Too many messages sent too quickly.', '⚠'); return false; }
+  return true;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function _startCountdown(ms, context) {
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
@@ -702,44 +801,6 @@ function _startCountdown(ms, context) {
   _tick();
   _countdownTimer = setInterval(_tick, 250);
 }
-function _recordWrongCode() {
-  const now = Date.now();
-  _enterRl.wrongCount++;
-
-  /* Still under the limit — show attempts remaining */
-  if (_enterRl.wrongCount < WRONG_CODE_LIMIT) {
-    const left = WRONG_CODE_LIMIT - _enterRl.wrongCount;
-    const errEl = $('join-error') || $('invite-error');
-    if (errEl) {
-      errEl.textContent = left === 1
-        ? '⚠ Last attempt — you will be locked out after this'
-        : `🔑 Wrong code — ${left} attempt${left !== 1 ? 's' : ''} remaining`;
-      errEl.className = left === 1 ? 'error-msg error-urgent' : 'error-msg';
-    }
-    return;
-  }
-
-  /* Hit the limit — exponential backoff + live countdown */
-  const backoffIndex = _enterRl.wrongCount - WRONG_CODE_LIMIT;
-  const waitMs = Math.min(30000 * Math.pow(2, backoffIndex), 8 * 60 * 1000);
-  _enterRl.lockedUntil = now + waitMs;
-  _enterRl.resetAt     = now + waitMs;
-  _enterRl.count       = 999;
-
-  const errEl = $('join-error') || $('invite-error');
-  if (errEl) errEl.textContent = '';
-  _startCountdown(waitMs);
-}
-
-function _checkEnterLock() {
-  const now = Date.now();
-  if (_enterRl.lockedUntil > now) {
-    const remaining = _enterRl.lockedUntil - now;
-    if (!_countdownTimer) _startCountdown(remaining);
-    return false;
-  }
-  return true;
-}
 
 function fmtTime(ts) {
   if (!ts) return '';
@@ -775,6 +836,22 @@ function saveRoom(c)   { localStorage.setItem(CONFIG.ROOM_KEY, c); }
 function loadRoom()    { return localStorage.getItem(CONFIG.ROOM_KEY); }
 
 window.addEventListener('DOMContentLoaded', () => {
+  // ── Offline / online banner ─────────────────────────────────────────────
+  function _updateOnlineBanner() {
+    let b = document.getElementById('offline-banner');
+    if (navigator.onLine) { b?.remove(); return; }
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'offline-banner';
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--danger,#e74c3c);color:#fff;text-align:center;padding:6px 12px;font-size:.72rem;font-family:var(--font-mono,monospace);letter-spacing:.5px';
+      b.textContent = '⚠ No internet connection — messages will not send';
+      document.body.prepend(b);
+    }
+  }
+  window.addEventListener('online',  _updateOnlineBanner);
+  window.addEventListener('offline', _updateOnlineBanner);
+  _updateOnlineBanner();
+
   // Start anonymous auth immediately — warm up the JWT before any room action.
   ensureAuth().catch(err => console.warn('[Miut Chat] Initial auth failed:', err.message));
 
@@ -865,9 +942,12 @@ function setupSidebar() {
   ov.addEventListener('click',      closeSidebar);
   ov.addEventListener('touchend',   e => { e.preventDefault(); closeSidebar(); }, { passive: false });
 
-  // Inject hamburger into chat-header
+  // Wire hamburger — attach to existing HTML element OR inject a new one
   const header = $('chat-header');
-  if (header && !$('hamburger-btn')) {
+  const existingHam = $('hamburger-btn');
+  if (existingHam) {
+    existingHam.addEventListener('click', e => { e.stopPropagation(); _sidebarOpen ? closeSidebar() : openSidebar(); });
+  } else if (header) {
     const ham = document.createElement('button');
     ham.id = 'hamburger-btn';
     ham.className = 'icon-btn hamburger-btn';
@@ -896,6 +976,7 @@ function setupSidebar() {
   }, { passive: true });
 }
 
+function toggleSidebar() { _sidebarOpen ? closeSidebar() : openSidebar(); }
 function openSidebar() {
   if (window.innerWidth > 640) return;
   _sidebarOpen = true;
@@ -980,8 +1061,7 @@ async function handleEnter() {
       _recordWrongCode();
       return;
     }
-    _enterRl.wrongCount = 0;
-    _enterRl.lockedUntil = 0;
+    _saveWrongState({ wrongCount: 0, lockedUntil: 0 });  // reset on correct code
     _roomEpoch = roomSnap.data()?.epoch || 0;
 
     const uid         = await getUID();
@@ -1531,12 +1611,15 @@ function startPresenceListener() {
 function updateOnlineUI() {
   const oc = $('online-count');
   const ms = $('member-status-text');
+  const sh = $('solo-hint');
   if (_onlineCount <= 1) {
     if (oc) oc.textContent = '';
     if (ms) ms.textContent = 'Only you are online';
+    if (sh) sh.style.display = 'flex';
   } else {
     if (oc) oc.textContent = _onlineCount;
     if (ms) ms.textContent = `${_onlineCount} members online`;
+    if (sh) sh.style.display = 'none';
   }
 }
 
@@ -1793,21 +1876,14 @@ window.addEventListener('beforeunload', () => {
     .update({ online: false }).catch(() => {});
 });
 
-const _sendRl = { count: 0, resetAt: 0 };
-function checkSendRateLimit() {
-  const now = Date.now();
-  if (now > _sendRl.resetAt) { _sendRl.count = 0; _sendRl.resetAt = now + 10000; }
-  _sendRl.count++;
-  if (_sendRl.count > 20) { toast('Slow down', 'Too many messages sent too quickly.', '⚠'); return false; }
-  return true;
-}
 
 async function sendMessage() {
   if (_editingDocId) { submitEdit().catch(() => {}); return; }
   if (!checkSendRateLimit()) return;
 
   const input = $('msg-input');
-  const text  = (input?.value || '').trim();
+  // Strip zero-width and invisible unicode chars that could be used to spoof messages
+  const text  = (input?.value || '').replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '').trim();
   if (!text || !state.roomCode) return;
   input.value = ''; input.style.height = 'auto';
   updateActionBtn();
@@ -2602,18 +2678,22 @@ function toggleSearch() {
   }
 }
 
+let _searchDebounceTimer = null;
 function doSearch(query) {
-  const q = (query || '').toLowerCase().trim();
-  let matchCount = 0;
-  document.querySelectorAll('.msg-wrapper').forEach(w => {
-    if (!q) { w.style.display = ''; return; }
-    const txt = (w.querySelector('.msg-bubble')?.textContent || '').toLowerCase();
-    const match = txt.includes(q);
-    w.style.display = match ? '' : 'none';
-    if (match) matchCount++;
-  });
-  const c = $('search-count');
-  if (c) c.textContent = q ? `${matchCount} result${matchCount !== 1 ? 's' : ''}` : '';
+  clearTimeout(_searchDebounceTimer);
+  _searchDebounceTimer = setTimeout(() => {
+    const q = (query || '').toLowerCase().trim();
+    let matchCount = 0;
+    document.querySelectorAll('.msg-wrapper').forEach(w => {
+      if (!q) { w.style.display = ''; return; }
+      const txt = (w.querySelector('.msg-bubble')?.textContent || '').toLowerCase();
+      const match = txt.includes(q);
+      w.style.display = match ? '' : 'none';
+      if (match) matchCount++;
+    });
+    const c = $('search-count');
+    if (c) c.textContent = q ? `${matchCount} result${matchCount !== 1 ? 's' : ''}` : '';
+  }, 120);
 }
 
 function clearSearch() {
@@ -2831,8 +2911,7 @@ async function joinFromInvite() {
       if (btn) { btn.disabled = false; const sp = btn.querySelector('span'); if (sp) sp.textContent = 'Join Room'; }
       return;
     }
-    _enterRl.wrongCount  = 0;
-    _enterRl.lockedUntil = 0;
+    _saveWrongState({ wrongCount: 0, lockedUntil: 0 });
     _roomEpoch = roomSnap.data()?.epoch || 0;
     const uid        = await getUID(); // Firebase Auth UID
     const memberSnap = await db.collection('rooms').doc(code).collection('members').doc(uid).get();
