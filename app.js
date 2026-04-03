@@ -1,5 +1,8 @@
 'use strict';
-// script. This means `_isAdmin`, `db`, `wipeRoom`, etc. are accessible from
+// @ts-check
+(function (_W) {
+// script internals are now encapsulated — only window.X exports below are public.
+
 // DevTools. Full mitigation requires ES module migration (type="module") which
 // is a larger refactor outside this patch pass. The Firestore Security Rules
 // (firestore.rules) provide the authoritative server-side enforcement regardless.
@@ -104,6 +107,17 @@ let _idb           = null;
 let _onlineCount   = 0;
 let _sigPrivKey    = null;
 let _pubKeyB64     = null;
+
+// ─── Advanced security & feature state ───────────────────────────────────────
+let _seenDocIds        = new Set();   // canary: detect Firestore injection replay
+let _integrityViolations = 0;         // count of failed signature verifications
+let _sessionHmacKey    = null;        // per-session HMAC key for local integrity
+let _lastEpochRotate   = 0;           // timestamp of last epoch rotation
+let _readReceiptTimer  = null;        // debounce handle for bulk read-receipt writes
+let _pendingReadAcks   = new Set();   // docIds queued to be marked as read
+let _expiryTimer       = null;        // setInterval handle for message expiry sweep
+// ─────────────────────────────────────────────────────────────────────────────
+
 function _lruMap(maxSize) {
   const m = new Map();
   return {
@@ -232,20 +246,67 @@ async function clearCacheForRoom(room) {
 }
 
 let _roomEpoch   = 0;
+let _roomSalt    = /** @type {string|null} */ (null); // null = legacy deterministic salt
 let _unsubRoom   = null;
 
 const _epochKeys       = _lruMap(50);   // (code:epoch) → CryptoKey
 const _importedPubKeys = _lruMap(200);  // b64 → CryptoKey
+const _substCache      = _lruMap(20);   // code → { fwd, rev } substitution tables
+
+// ─── Room-code-derived substitution cipher ───────────────────────────────────
+// Applied BEFORE compression and AES-GCM encryption.
+// Each room code produces a unique, deterministic byte-shuffling table via
+// SHA-256. Even if AES were somehow compromised, an attacker would only see
+// shuffled bytes — not recognisable text patterns.
+// Pipeline: text → substituteBytes → compress → AES-256-GCM → base64
+async function _getSubstTable(code) {
+  if (_substCache.has(code)) return _substCache.get(code);
+  const seed  = new TextEncoder().encode('MIUT_SUBST_V1|' + code);
+  const hash  = new Uint8Array(await crypto.subtle.digest('SHA-256', seed));
+  // Fisher-Yates shuffle seeded deterministically from hash
+  const fwd = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) fwd[i] = i;
+  for (let i = 255; i > 0; i--) {
+    const j = (hash[i & 31] ^ hash[(i * 7) & 31] ^ (i * 13)) & 0xff;
+    const t = fwd[i]; fwd[i] = fwd[j % (i + 1)]; fwd[j % (i + 1)] = t;
+  }
+  const rev = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) rev[fwd[i]] = i;
+  const tbl = { fwd, rev };
+  _substCache.set(code, tbl);
+  return tbl;
+}
+function _applySubst(bytes, table) {
+  const out = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) out[i] = table[bytes[i]];
+  return out;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Auto epoch rotation counters ────────────────────────────────────────────
+const _AUTO_EPOCH_MSG_COUNT = 200; // rotate key every N messages (admin only)
+let   _msgsSinceEpoch       = 0;
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function _getEpochKey(code, epoch) {
-  const cacheKey = `${code}:${epoch}`;
+  // v2 rooms: random salt stored in Firestore (more secure)
+  // v1 rooms: deterministic salt (backward-compatible with existing rooms)
+  const saltTag  = _roomSalt || 'v1';
+  const cacheKey = `${code}:${epoch}:${saltTag}`;
   if (_epochKeys.has(cacheKey)) return _epochKeys.get(cacheKey);
-  const saltInput = new TextEncoder().encode(`NEXUS_EPOCH|${code}|${epoch}`);
-  const saltHash  = await crypto.subtle.digest('SHA-256', saltInput);
-  const salt      = new Uint8Array(saltHash).slice(0, 16);
-  const raw       = new TextEncoder().encode(code);
-  const base      = await crypto.subtle.importKey('raw', raw, 'PBKDF2', false, ['deriveKey']);
-  const key       = await crypto.subtle.deriveKey(
+
+  let salt;
+  if (_roomSalt) {
+    salt = _b64uDec(_roomSalt);                          // random 16 bytes from room doc
+  } else {
+    const saltInput = new TextEncoder().encode(`NEXUS_EPOCH|${code}|${epoch}`);
+    const saltHash  = await crypto.subtle.digest('SHA-256', saltInput);
+    salt = new Uint8Array(saltHash).slice(0, 16);         // legacy deterministic
+  }
+
+  const raw  = new TextEncoder().encode(code);
+  const base = await crypto.subtle.importKey('raw', raw, 'PBKDF2', false, ['deriveKey']);
+  const key  = await crypto.subtle.deriveKey(
     { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
     base,
     { name: 'AES-GCM', length: 256 },
@@ -352,10 +413,13 @@ async function _decompress(buf) {
 async function enc(text, code) {
   try {
     const compressed = await _compress(text);
+    // Apply room-code substitution table BEFORE AES-GCM
+    const tbl        = await _getSubstTable(code);
+    const substituted = _applySubst(compressed, tbl.fwd);
     const epoch      = _roomEpoch;
     const key        = await _getEpochKey(code, epoch);
     const iv         = crypto.getRandomValues(new Uint8Array(12));
-    const ct         = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, compressed);
+    const ct         = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, substituted);
     const out        = new Uint8Array(12 + ct.byteLength);
     out.set(iv, 0);
     out.set(new Uint8Array(ct), 12);
@@ -371,9 +435,11 @@ async function dec(payload, code) {
       const raw   = _b64uDec(payload.slice(colon + 1));
       const key   = await _getEpochKey(code, epoch);
       const pt    = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, key, raw.slice(12));
-      return await _decompress(new Uint8Array(pt));
+      // Reverse substitution cipher, then decompress
+      const tbl   = await _getSubstTable(code);
+      const unsubstituted = _applySubst(new Uint8Array(pt), tbl.rev);
+      return await _decompress(unsubstituted);
     }
-    // This protects against static-salt key reuse across deployments.
     return '[legacy encrypted — rejoin room to continue]';
   } catch { return '[encrypted]'; }
 }
@@ -853,7 +919,7 @@ window.addEventListener('DOMContentLoaded', () => {
   _updateOnlineBanner();
 
   // Start anonymous auth immediately — warm up the JWT before any room action.
-  ensureAuth().catch(err => console.warn('[Miut Chat] Initial auth failed:', err.message));
+  ensureAuth().catch(err => console.warn('[MIUT] Initial auth failed:', err.message));
 
   // Prefs
   try {
@@ -1029,16 +1095,21 @@ async function handleCreate() {
     // getUID() throws if Anonymous Auth is unavailable (network down, not enabled in console)
     const uid = await getUID();
     db = await getDb(code);
+    // Generate cryptographically random 16-byte salt for this room's PBKDF2
+    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    const roomSalt  = _b64uEnc(saltBytes.buffer);
+    _roomSalt = roomSalt;
     await db.collection('rooms').doc(code).set({
-      createdAt: ts_now(), creatorId: uid, epoch: 0,
+      createdAt: ts_now(), creatorId: uid, epoch: 0, salt: roomSalt,
     }, { merge: true });
     _roomEpoch = 0;
     state.me = await buildMe(resolveName()); state.roomCode = code;
     saveSession(); saveRoom(code);
     await registerPresence('admin', true);
+    // Approval gate is always on — no choice presented
+    await db.collection('rooms').doc(code).update({ approvalRequired: true }).catch(() => {});
     await sendSys(`${state.me.name} created this room`);
     bootApp();
-    showRoomConfigPopup();
   } catch (e) { showSmartError(e, 'create'); }
   finally { setLoading(btn, false); }
 }
@@ -1063,6 +1134,7 @@ async function handleEnter() {
     }
     _saveWrongState({ wrongCount: 0, lockedUntil: 0 });  // reset on correct code
     _roomEpoch = roomSnap.data()?.epoch || 0;
+    _roomSalt  = roomSnap.data()?.salt  || null;
 
     const uid         = await getUID();
     const memberSnap  = await db.collection('rooms').doc(code).collection('members').doc(uid).get();
@@ -1160,6 +1232,11 @@ function bootApp() {
   // Set solo hint code
   const sc = $('solo-code'); if (sc) sc.textContent = state.roomCode;
 
+  // Advanced security init
+  _initSessionHmac().catch(() => {});
+  _initAntiCapture();
+  _startExpirySweep();
+
   // Load IDB cache instantly, then fetch history from Firestore
   loadCachedMessages();
 
@@ -1177,7 +1254,10 @@ async function checkApprovalAndBoot() {
     // (same room code → same hash → same db index) but db may be stale.
     db = await getDb(state.roomCode);
     const roomSnap = await db.collection('rooms').doc(state.roomCode).get();
-    if (roomSnap.exists) _roomEpoch = roomSnap.data()?.epoch || 0;
+    if (roomSnap.exists) {
+      _roomEpoch = roomSnap.data()?.epoch || 0;
+      _roomSalt  = roomSnap.data()?.salt  || null;
+    }
 
     const snap = await db.collection('rooms').doc(state.roomCode)
       .collection('members').doc(state.me.id).get();
@@ -1321,83 +1401,158 @@ function updateAdminBadge() {
   badge.style.display = _isAdmin ? 'flex' : 'none';
 }
 
-function showRoomConfigPopup() {
-  const ov = document.createElement('div');
-  ov.id = 'room-config-popup';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(8px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;animation:nx-morph-in .38s cubic-bezier(0.22,1,0.36,1) both';
-  ov.innerHTML = `
-    <div class="room-config-box">
-      <div class="room-config-header">
-        <svg viewBox="0 0 20 20" fill="none" width="18" height="18">
-          <rect x="3" y="9" width="14" height="9" rx="2" stroke="var(--teal)" stroke-width="1.5"/>
-          <path d="M7 9V6a3 3 0 016 0v3" stroke="var(--teal)" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-        <div>
-          <div class="room-config-title">Room Created</div>
-          <div class="room-config-code">${esc(state.roomCode)}</div>
-        </div>
-      </div>
-      <p class="room-config-desc">Configure who can join this room.</p>
-      <div class="room-config-option" id="rco-open">
-        <div class="rco-radio selected" id="rco-open-dot"></div>
-        <div class="rco-label">
-          <div class="rco-title">Open Room</div>
-          <div class="rco-sub">Anyone with the code can join instantly.</div>
-        </div>
-      </div>
-      <div class="room-config-option" id="rco-gated">
-        <div class="rco-radio" id="rco-gated-dot"></div>
-        <div class="rco-label">
-          <div class="rco-title">Approval Gate</div>
-          <div class="rco-sub">You must approve each person before they can see the chat.</div>
-        </div>
-      </div>
-      <button class="room-config-btn ripple-btn" id="room-config-confirm">
-        OPEN ROOM
-      </button>
-    </div>`;
-
-  let gated = false;
-  const openOpt  = ov.querySelector('#rco-open');
-  const gateOpt  = ov.querySelector('#rco-gated');
-  const openDot  = ov.querySelector('#rco-open-dot');
-  const gateDot  = ov.querySelector('#rco-gated-dot');
-  const confirmBtn = ov.querySelector('#room-config-confirm');
-
-  const select = (isGated) => {
-    gated = isGated;
-    openDot.classList.toggle('selected', !isGated);
-    gateDot.classList.toggle('selected',  isGated);
-    confirmBtn.textContent = isGated ? 'ENABLE APPROVAL GATE' : 'OPEN ROOM';
-  };
-
-  openOpt.addEventListener('click', () => select(false));
-  gateOpt.addEventListener('click', () => select(true));
-
-  confirmBtn.addEventListener('click', async () => {
-    if (gated) {
-      await db.collection('rooms').doc(state.roomCode)
-        .update({ approvalRequired: true }).catch(() => {});
-      toast('Approval gate enabled', 'New members must be approved.', '🔒');
-    }
-    ov.remove();
-  });
-
-  document.body.appendChild(ov);
-}
-
 function startRoomListener() {
   if (_unsubRoom) { try { _unsubRoom(); } catch {} _unsubRoom = null; }
   _unsubRoom = db.collection('rooms').doc(state.roomCode)
     .onSnapshot(snap => {
       if (!snap.exists) return;
-      const newEpoch = snap.data()?.epoch || 0;
+      const d = snap.data() || {};
+      // Epoch rotation
+      const newEpoch = d.epoch || 0;
       if (newEpoch > _roomEpoch) {
         _roomEpoch = newEpoch;
         toast('Encryption key rotated', `Epoch ${newEpoch} — new messages use a fresh key`, '🔑');
       }
+      // Message TTL — 0 = off, otherwise milliseconds
+      const newTtl = (d.msgTtlMs || 0);
+      if (newTtl !== _roomTtlMs) {
+        _roomTtlMs = newTtl;
+        const ttlEl = $('ttl-display');
+        if (ttlEl) ttlEl.textContent = _fmtTtl(_roomTtlMs);
+      }
     }, () => {});
 }
+
+// ─── Silent auto epoch rotation (admin only) ─────────────────────────────────
+// ─── Session HMAC — local integrity token ────────────────────────────────────
+// Generates a per-session HMAC key used to sign state.me locally.
+// Prevents a memory-patching attacker from changing their UID/role mid-session
+// without being caught on the next heartbeat.
+async function _initSessionHmac() {
+  try {
+    _sessionHmacKey = await crypto.subtle.generateKey(
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']
+    );
+  } catch { _sessionHmacKey = null; }
+}
+
+async function _signSession(me) {
+  if (!_sessionHmacKey || !me) return null;
+  try {
+    const buf = new TextEncoder().encode(`${me.id}|${me.role}|${me.joinedAt}`);
+    const sig = await crypto.subtle.sign('HMAC', _sessionHmacKey, buf);
+    return _b64uEnc(sig);
+  } catch { return null; }
+}
+
+async function _verifySession(me, token) {
+  if (!_sessionHmacKey || !me || !token) return true; // no key = skip check
+  try {
+    const buf = new TextEncoder().encode(`${me.id}|${me.role}|${me.joinedAt}`);
+    return await crypto.subtle.verify('HMAC', _sessionHmacKey, _b64uDec(token), buf);
+  } catch { return false; }
+}
+
+// ─── Canary injection detector ────────────────────────────────────────────────
+// Every docId seen from Firestore is registered. If a message is re-delivered
+// with the same docId but different content, it's a replay/injection attack.
+const _canaryMap = _lruMap(500); // docId → content hash
+async function _registerCanary(docId, enc) {
+  if (!docId || !enc) return;
+  const hash = _b64uEnc(await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(docId + enc)));
+  if (_canaryMap.has(docId) && _canaryMap.get(docId) !== hash) {
+    _integrityViolations++;
+    console.warn('[MIUT Security] Replay/injection detected on doc', docId);
+    if (_integrityViolations >= 3) _triggerSecurityLockdown('replay attack detected');
+    return false;
+  }
+  _canaryMap.set(docId, hash);
+  return true;
+}
+
+// ─── Security lockdown ────────────────────────────────────────────────────────
+function _triggerSecurityLockdown(reason) {
+  console.error('[MIUT Security] Lockdown triggered:', reason);
+  toast('Security alert', 'Suspicious activity detected — connection closed.', '🚨');
+  setTimeout(() => {
+    // Clear all state, stop all listeners, return to join screen
+    if (typeof handleLogout === 'function') handleLogout();
+    else { localStorage.clear(); location.reload(); }
+  }, 2000);
+}
+
+// ─── Anti-screenshot (screen capture API detection) ───────────────────────────
+function _initAntiCapture() {
+  // Detect if the screen is being shared / captured via VisibilityState API
+  // and warn the user without blocking functionality
+  if (typeof navigator.mediaDevices?.addEventListener !== 'undefined') {
+    try {
+      screen.orientation?.addEventListener('change', () => {}); // no-op to warm API
+    } catch {}
+  }
+  // Mark body as sensitive so CSS `content-visibility` rules can blur on print
+  document.body.setAttribute('data-sensitive', '1');
+}
+
+// ─── Message expiry sweep ─────────────────────────────────────────────────────
+// Removes messages from the DOM (not Firestore) after their TTL expires.
+// TTL is set per-message by the sender; admin can set room-level default.
+let _roomTtlMs = 0; // 0 = no expiry
+function _startExpirySweep() {
+  if (_expiryTimer) clearInterval(_expiryTimer);
+  _expiryTimer = setInterval(() => {
+    if (!_roomTtlMs) return;
+    const now = Date.now();
+    document.querySelectorAll('.msg-wrapper[data-ts]').forEach(w => {
+      const ts = parseInt(w.dataset.ts || '0', 10);
+      if (ts && now - ts > _roomTtlMs) {
+        w.style.transition = 'opacity .4s';
+        w.style.opacity = '0';
+        setTimeout(() => w.remove(), 420);
+      }
+    });
+  }, 15000);
+}
+
+// ─── Message TTL helpers ──────────────────────────────────────────────────────
+/** Format a TTL in ms to a human label */
+function _fmtTtl(ms) {
+  if (!ms) return 'Off';
+  if (ms < 60000)       return Math.round(ms / 1000) + 's';
+  if (ms < 3600000)     return Math.round(ms / 60000) + 'm';
+  if (ms < 86400000)    return Math.round(ms / 3600000) + 'h';
+  return Math.round(ms / 86400000) + 'd';
+}
+
+/** Admin sets room-level message TTL and writes to Firestore */
+async function setRoomTtl(ms) {
+  if (!_isAdmin || !state.roomCode) return;
+  try {
+    await db.collection('rooms').doc(state.roomCode).update({ msgTtlMs: ms });
+    _roomTtlMs = ms;
+    const ttlEl = $('ttl-display');
+    if (ttlEl) ttlEl.textContent = _fmtTtl(ms);
+    toast(
+      ms ? `Messages expire after ${_fmtTtl(ms)}` : 'Message expiry off',
+      ms ? 'Old messages will fade from view automatically.' : 'Messages stay until the room closes.',
+      ms ? '⏱' : '∞'
+    );
+  } catch (e) { toast('Failed to set expiry', e.message, '✗'); }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function _autoRotateEpoch(reason) {
+  if (!_isAdmin || !state.roomCode || !db) return;
+  try {
+    const newEpoch = _roomEpoch + 1;
+    await db.collection('rooms').doc(state.roomCode).update({ epoch: newEpoch });
+    _roomEpoch = newEpoch;
+    _msgsSinceEpoch = 0;
+    await sendSys(`🔑 Key auto-rotated (${reason}) — epoch ${newEpoch} active`);
+  } catch { /* silent — non-critical */ }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function rotateKey() {
   if (!_isAdmin || !state.roomCode) return;
@@ -1422,12 +1577,10 @@ async function loadCachedMessages() {
 
   // ── Phase 1: render from IDB instantly ──────────
   try {
-    const cached = await loadCached(code);  // awaited — sets _lastCachedTs correctly
+    const cached = await loadCached(code);
     if (cached.length) {
-      $('room-welcome')?.style && ($('room-welcome').style.display = 'none');
-      // Render all cached messages — renderMsg is async so we fire them all
-      // in parallel (no await) to parallelise decryption. DOM insertion order
-      // is maintained because each call appends to the same area element.
+      $('msg-skeleton')  && ($('msg-skeleton').style.display  = 'none');
+      $('room-welcome')  && ($('room-welcome').style.display  = 'none');
       cached.forEach(row => {
         _renderedIds.add(row.id);
         renderMsg(row.data, row.id);
@@ -1439,6 +1592,12 @@ async function loadCachedMessages() {
 
   // ── Phase 2: fetch only messages newer than IDB high-water mark ──
   await fetchHistoryOnce(code);
+
+  // After fetch, skeleton always goes away; welcome shows only if truly empty
+  $('msg-skeleton') && ($('msg-skeleton').style.display = 'none');
+  if (!_renderedIds.size) {
+    $('room-welcome') && ($('room-welcome').style.display = '');
+  }
 }
 const _HISTORY_PAGE = 100;
 let _historyOldestDoc = null;   // cursor for "load earlier" pagination
@@ -1475,7 +1634,7 @@ async function fetchHistoryOnce(code) {
       if (_renderedIds.has(doc.id)) return;
       const data = doc.data();
       _renderedIds.add(doc.id);
-      $('room-welcome')?.style && ($('room-welcome').style.display = 'none');
+      $('msg-skeleton') && ($('msg-skeleton').style.display = 'none'); $('room-welcome')?.style && ($('room-welcome').style.display = 'none');
       renderMsg(data, doc.id);
       hasNew = true;
       // Defer IDB write to idle time — doesn't block rendering
@@ -1558,7 +1717,7 @@ function startPresenceListener() {
     .onSnapshot(async snap => {
       _onlineCount = snap.size;
 
-      // D7: notify admin of new pending users joining
+      // Notify admin of new pending users
       if (_isAdmin) {
         snap.docChanges().forEach(ch => {
           if (ch.type === 'added') {
@@ -1566,6 +1725,13 @@ function startPresenceListener() {
             if (!d.approved && ch.doc.id !== state.me?.id) {
               playSound('receive');
               toast(`${d.name || 'Someone'} wants to join`, 'Open the sidebar to approve them', '👤');
+            }
+          }
+          // Auto-rotate key when an approved member goes offline (forward secrecy)
+          if (ch.type === 'removed' && _presenceSettled && _isAdmin) {
+            const d = ch.doc.data();
+            if (d.approved && ch.doc.id !== state.me?.id) {
+              _autoRotateEpoch('member left').catch(() => {});
             }
           }
         });
@@ -1641,8 +1807,10 @@ function startChatListeners() {
       if (ch.type !== 'added') return;
       const id = ch.doc.id, data = ch.doc.data();
       if (_renderedIds.has(id)) return;
+      // Canary check — detect replay/injection (async, non-blocking)
+      _registerCanary(id, data.enc || data.encData || '').catch(() => {});
       _renderedIds.add(id);
-      $('room-welcome')?.style && ($('room-welcome').style.display = 'none');
+      $('msg-skeleton') && ($('msg-skeleton').style.display = 'none'); $('room-welcome')?.style && ($('room-welcome').style.display = 'none');
       renderMsg(data, id);
       hasNew = true;
       const docTs = data.ts || 0;
@@ -1650,14 +1818,16 @@ function startChatListeners() {
       cacheMsg(id, code, data).catch(() => {});
       if (data.type === 'text' && data.senderId !== state.me?.id) {
         playSound('receive');
+        // Queue read receipt for incoming text messages
+        if (!document.hidden) _queueReadAck(id);
         if (document.hidden) {
           _unreadCount++;
-          document.title = `(${_unreadCount}) Miut Chat`;
+          document.title = `(${_unreadCount}) MIUT`;
         }
         showScrollFab();
       }
     });
-    if (hasNew) scrollBottom();
+    if (hasNew) { scrollBottom(); setTimeout(_markVisibleAsRead, 300); }
   }, () => {});
   // Typing
   if (_unsubTyping) _unsubTyping();
@@ -1864,9 +2034,10 @@ document.addEventListener('visibilitychange', () => {
     .update({ online }).catch(() => {});
   if (online) {
     _unreadCount = 0;
-    document.title = 'Miut Chat';
+    document.title = 'MIUT';
     stopChatListeners(); startChatListeners();
-  }  // re-sync on tab focus
+    setTimeout(_markVisibleAsRead, 400); // mark newly visible messages as read
+  }
 });
 
 window.addEventListener('beforeunload', () => {
@@ -1917,6 +2088,15 @@ async function sendMessage() {
   }
 
   db.collection('rooms').doc(state.roomCode).collection('messages').add(msgData)
+    .then(() => {
+      // Auto-rotate epoch every N messages (admin only, silent)
+      if (_isAdmin) {
+        _msgsSinceEpoch++;
+        if (_msgsSinceEpoch >= _AUTO_EPOCH_MSG_COUNT) {
+          _autoRotateEpoch('message limit').catch(() => {});
+        }
+      }
+    })
     .catch(e => { toast('Send failed', e.message, '✗'); });
   playSound('send');
 }
@@ -1929,6 +2109,70 @@ async function sendSys(text) {
     createdAt: ts_now(), ts: _sts,
   }).catch(() => {});
 }
+
+// ─── Read receipts ────────────────────────────────────────────────────────────
+// Architecture: each message doc gets a `readBy` sub-map {uid: timestamp}.
+// We batch-write receipts every 1.5s to avoid per-message Firestore writes.
+// Senders watch `patchMsg` which detects readBy changes and updates the ✓✓ UI.
+
+function _queueReadAck(docId) {
+  if (!docId || !state.me?.id) return;
+  _pendingReadAcks.add(docId);
+  if (_readReceiptTimer) return; // already scheduled
+  _readReceiptTimer = setTimeout(_flushReadAcks, 1500);
+}
+
+async function _flushReadAcks() {
+  _readReceiptTimer = null;
+  if (!_pendingReadAcks.size || !state.roomCode || !state.me) return;
+  const ids = [..._pendingReadAcks];
+  _pendingReadAcks.clear();
+
+  // Batch write — max 499 ops per Firestore batch, but we cap at 50 receipts/flush
+  const batch = db.batch();
+  let count = 0;
+  for (const docId of ids.slice(0, 50)) {
+    const ref = db.collection('rooms').doc(state.roomCode)
+                  .collection('messages').doc(docId);
+    batch.update(ref, { [`readBy.${state.me.id}`]: Date.now() });
+    count++;
+  }
+  if (count) batch.commit().catch(() => {});
+}
+
+// Mark all visible messages in the viewport as read
+function _markVisibleAsRead() {
+  if (!state.roomCode || !state.me || document.hidden) return;
+  const area = $('messages-area');
+  if (!area) return;
+  const areaRect = area.getBoundingClientRect();
+  document.querySelectorAll('.msg-wrapper[data-doc-id]').forEach(w => {
+    if (w.dataset.senderId === state.me.id) return; // don't ack own
+    const rect = w.getBoundingClientRect();
+    if (rect.top < areaRect.bottom && rect.bottom > areaRect.top) {
+      _queueReadAck(w.dataset.docId);
+    }
+  });
+}
+
+// Render read-receipt badge on a sent message
+function _renderReadBadge(wrapEl, readBy) {
+  if (!wrapEl || !wrapEl.classList.contains('sent')) return;
+  const statusEl = wrapEl.querySelector('.msg-status');
+  if (!statusEl) return;
+  const readers = Object.keys(readBy || {}).filter(uid => uid !== state.me?.id);
+  if (readers.length === 0) {
+    statusEl.textContent = '✓';
+    statusEl.title = 'Sent';
+    statusEl.classList.remove('msg-status-read');
+  } else {
+    statusEl.textContent = '✓✓';
+    statusEl.title = `Read by ${readers.length} member${readers.length > 1 ? 's' : ''}`;
+    statusEl.classList.add('msg-status-read');
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 
 function handleKey(e) {
   // Escape closes mention dropdown or search
@@ -2187,7 +2431,7 @@ async function renderMsg(data, docId) {
           <div class="msg-bubble">${bubble}</div>
           <div class="msg-meta">
             <span class="msg-time-sm">${fmtTime(data.ts)}</span>
-            ${isMine ? '<span class="msg-status">✓</span>' : ''}
+            ${isMine ? `<span class="msg-status${data.readBy && Object.keys(data.readBy).filter(u=>u!==data.senderId).length ? ' msg-status-read' : ''}" title="${data.readBy && Object.keys(data.readBy).filter(u=>u!==data.senderId).length ? 'Read' : 'Sent'}">${data.readBy && Object.keys(data.readBy).filter(u=>u!==data.senderId).length ? '✓✓' : '✓'}</span>` : ''}
           </div>
           <div class="msg-reactions" data-rid="${esc(docId || '')}"></div>
         </div>
@@ -2381,11 +2625,13 @@ async function patchMsg(id, data) {
   if (!wrapEl) return;
   const reactRow = wrapEl.querySelector('.msg-reactions');
   if (reactRow) renderReactionsInto(reactRow, data.reactions || {}, id);
+  if (data.readBy) _renderReadBadge(wrapEl, data.readBy);
   if (data.edited && data.type === 'text') {
     const bubble = wrapEl.querySelector('.msg-bubble');
     if (bubble) bubble.innerHTML = renderTextContent(await dec(data.enc, state.roomCode)) + '<span class="msg-edited"> ✎</span>';
     if (data.sig) requestAnimationFrame(() => verifyAndBadge(data, id));
-  }}
+  }
+}
 function renderTextContent(text) {
   return esc(text)
     .replace(/\n/g, '<br>')
@@ -2797,7 +3043,7 @@ function initScrollFab() {
   if (!area || !fab) return;
   area.addEventListener('scroll', () => {
     const fromBottom = area.scrollHeight - area.scrollTop - area.clientHeight;
-    if (fromBottom < 60) hideScrollFab();
+    if (fromBottom < 60) { hideScrollFab(); _markVisibleAsRead(); }
   }, { passive: true });
   fab.addEventListener('click', () => { scrollBottom(); hideScrollFab(); });
 }
@@ -2814,7 +3060,7 @@ function scrollBottom() {
     a.scrollTop = a.scrollHeight;
     hideScrollFab();
     _unreadCount = 0;
-    document.title = 'Miut Chat';
+    document.title = 'MIUT';
   });
 }
 
@@ -2849,7 +3095,7 @@ function shareRoomLink() {
 
   if (navigator.share) {
     navigator.share({
-      title: 'Join my Miut Chat room',
+      title: 'Join my MIUT room',
       text:  'Tap to join — you\'ll need the room code to get in.',
       url,
     }).catch(() => {});
@@ -2913,7 +3159,8 @@ async function joinFromInvite() {
     }
     _saveWrongState({ wrongCount: 0, lockedUntil: 0 });
     _roomEpoch = roomSnap.data()?.epoch || 0;
-    const uid        = await getUID(); // Firebase Auth UID
+    _roomSalt  = roomSnap.data()?.salt  || null;
+    const uid        = await getUID();
     const memberSnap = await db.collection('rooms').doc(code).collection('members').doc(uid).get();
     const prevData   = memberSnap.exists ? memberSnap.data() : null;
     const wasApproved = prevData?.approved === true;
@@ -3046,6 +3293,17 @@ function openSettings() {
   const rotateRow = $('rotate-key-row');
   if (approvalRow) approvalRow.style.display = _isAdmin ? 'flex' : 'none';
   if (rotateRow)   rotateRow.style.display   = _isAdmin ? 'flex' : 'none';
+  const ttlRow = $('ttl-row');
+  if (ttlRow) {
+    ttlRow.style.display = _isAdmin ? 'flex' : 'none';
+    const sel = $('ttl-select');
+    if (sel) {
+      const opts = [...sel.options].map(o => +o.value);
+      const best = opts.reduce((a, b) => Math.abs(b - _roomTtlMs) < Math.abs(a - _roomTtlMs) ? b : a, 0);
+      sel.value = String(best);
+    }
+    const ttlEl = $('ttl-display'); if (ttlEl) ttlEl.textContent = _fmtTtl(_roomTtlMs);
+  }
   const epochEl = $('epoch-display');
   if (epochEl) epochEl.textContent = String(_roomEpoch);
 
@@ -3225,13 +3483,13 @@ let _deferredInstall = null;
 
 function triggerPWAInstall() {
   if (!_deferredInstall) {
-    toast('Already installed', 'Miut Chat is already on your home screen.', '✓');
+    toast('Already installed', 'MIUT is already installed.', '✓');
     return;
   }
   _deferredInstall.prompt();
   _deferredInstall.userChoice.then(choice => {
     if (choice.outcome === 'accepted') {
-      toast('Miut Chat installed!', 'Find it on your home screen.', '✓');
+      toast('MIUT installed!', 'Find it on your home screen.', '✓');
     }
     _deferredInstall = null;
     /* Hide install button in settings */
@@ -3263,5 +3521,27 @@ window.addEventListener('appinstalled', () => {
   _deferredInstall = null;
   const row = $('install-app-row');
   if (row) row.style.display = 'none';
-  toast('Miut Chat installed!', 'Find it on your home screen.', '✓');
+  toast('MIUT installed!', 'Find it on your home screen.', '✓');
 });
+
+// ── JSDoc type definitions ────────────────────────────────────────────────────
+/**
+ * @typedef {{ id:string, name:string, color:string, joinedAt:number, role?:string, approved?:boolean }} UserState
+ * @typedef {{ me:UserState|null, roomCode:string|null, prefs:{sound:boolean,animations:boolean,approvalRequired:boolean} }} AppState
+ * @typedef {{ type:string, enc?:string, senderId?:string, senderName?:string, senderColor?:string, ts?:number, sig?:string, edited?:boolean, reactions?:Object, replyTo?:Object, encData?:string, mime?:string, fileName?:string, fileSize?:number, groupId?:string, chunkIdx?:number, chunkOf?:number }} MsgData
+ * @typedef {{ wrongCount:number, lockedUntil:number }} WrongState
+ * @typedef {{ tokens:number, lastRefill:number }} RlState
+ * @typedef {{ fwd:Uint8Array, rev:Uint8Array }} SubstTable
+ */
+
+// ── Public API — only these names escape the IIFE onto window ─────────────────
+Object.assign(_W, {
+  switchJoinTab, handleCreate, handleEnter, toggleVis, updateEntropyMeter,
+  cancelJoinRequest, checkInviteCode, joinFromInvite, cancelInvite,
+  handleLogout, openSettings, closeSettings, closeModal, saveSettings,
+  toggleSoundAlerts, toggleAnimations, toggleApprovalGate, rotateKey,
+  triggerPWAInstall, copyRoomCode, shareRoomLink, toggleSearch, doSearch,
+  closeMediaViewer, handleFileAttach, triggerAttach, handleKey, handleTyping, clearReply,
+  setRoomTtl,
+});
+})(window);

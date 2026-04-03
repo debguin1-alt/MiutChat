@@ -1,7 +1,7 @@
 {
-  "name": "Miut Chat · Private Chat",
-  "short_name": "Miut Chat",
-  "description": "Private encrypted group chat. Code-locked rooms. No sign-in required.",
+  "name": "MIUT",
+  "short_name": "MIUT",
+  "description": "Digital footprint? We believe in digital ghosts. No trace, no accounts, no identity.",
   "id": "/Miut/",
   "start_url": "/Miut/",
   "scope": "/Miut/",

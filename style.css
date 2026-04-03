@@ -769,3 +769,53 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 }
 :focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:3px}
 button:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:5px}
+
+/* ── Skeleton loader ─────────────────────────────────────────── */
+@keyframes skel-pulse {
+  0%,100% { opacity: .35; }
+  50%      { opacity: .7;  }
+}
+.msg-skeleton-wrap { padding: 16px 12px; display: flex; flex-direction: column; gap: 18px; }
+.skel-row { display: flex; align-items: flex-end; gap: 8px; }
+.skel-row.sent { flex-direction: row-reverse; }
+.skel-av { width: 30px; height: 30px; border-radius: 50%; background: var(--border); flex-shrink: 0; animation: skel-pulse 1.4s ease infinite; }
+.skel-lines { display: flex; flex-direction: column; gap: 6px; max-width: 65%; }
+.skel-line { height: 11px; border-radius: 6px; background: var(--border); animation: skel-pulse 1.4s ease infinite; }
+.skel-line.w30 { width: 30%; }
+.skel-line.w40 { width: 40%; }
+.skel-line.w45 { width: 45%; }
+.skel-line.w50 { width: 50%; }
+.skel-line.w55 { width: 55%; }
+.skel-line.w60 { width: 60%; }
+.skel-line.w70 { width: 70%; }
+
+/* ── Read receipts ───────────────────────────────────────────── */
+.msg-status { font-size: .65rem; color: var(--text2); letter-spacing: -.5px; }
+.msg-status-read { color: var(--teal); font-weight: 700; }
+
+/* ── Anti-screenshot print suppression ──────────────────────── */
+@media print {
+  [data-sensitive="1"] { filter: blur(12px); user-select: none; }
+  .msg-bubble { background: #000 !important; color: #000 !important; }
+}
+
+/* ── Message expiry fade ─────────────────────────────────────── */
+.msg-wrapper[data-expiring] { animation: expiry-pulse 1s ease infinite; }
+@keyframes expiry-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── Security alert toast ────────────────────────────────────── */
+.toast.security { border-left: 3px solid var(--danger); }
+
+/* ── TTL select ──────────────────────────────────────────────── */
+.ttl-select {
+  background: var(--surface2);
+  color: var(--text1);
+  border: 1px solid var(--teal-border);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  cursor: pointer;
+  outline: none;
+}
+.ttl-select:focus { border-color: var(--teal); }
