@@ -1186,7 +1186,7 @@ function resolveName() {
 }
 
 async function handleCreate() {
-  if (!checkRateLimit('create')) return;
+  if (!(await checkRateLimit('create'))) return;
   const code = ($('input-create-code')?.value || '').trim();
   if (!validateRoomCode(code)) return;
 
@@ -1223,7 +1223,7 @@ async function handleCreate() {
 
 async function handleEnter() {
   if (!_checkEnterLock()) return;
-  if (!checkRateLimit('enter')) return;
+  if (!(await checkRateLimit('enter'))) return;
   const code = ($('input-room-code')?.value || '').trim();
   if (!validateRoomCode(code)) return;
 
@@ -3250,7 +3250,7 @@ async function joinFromInvite() {
     if (err) err.textContent = 'Room code contains invalid characters.';
     return;
   }
-  if (!checkRateLimit('enter')) return;
+  if (!(await checkRateLimit('enter'))) return;
 
   const btn = $('invite-join-btn');
   if (btn) { btn.disabled = true; const sp = btn.querySelector('span'); if (sp) sp.textContent = 'Joining…'; }
@@ -3649,6 +3649,9 @@ Object.assign(_W, {
   toggleSoundAlerts, toggleAnimations, toggleApprovalGate, rotateKey,
   triggerPWAInstall, copyRoomCode, shareRoomLink, toggleSearch, doSearch,
   closeMediaViewer, handleFileAttach, triggerAttach, handleKey, handleTyping, clearReply,
-  setRoomTtl,
+  setRoomTtl, toggleSidebar, closeSidebar,
+  toast, startChatListeners, stopChatListeners,
+  get state() { return state; },
+  get db()    { return db; },
 });
 })(window);

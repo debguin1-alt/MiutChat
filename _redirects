@@ -4,14 +4,17 @@
 http://miutchat.pages.dev/* https://miutchat.pages.dev/:splat 301
 
 # Block common scanner / attack paths immediately at edge (returns 410 Gone)
-/.env                         /canary-trap  302
-/wp-admin/*                   /canary-trap  302
-/admin/*                      /canary-trap  302
-/.git/*                       /canary-trap  302
-/phpinfo*                     /canary-trap  302
-/config*                      /canary-trap  302
-/backup*                      /canary-trap  302
+/.env                         /api/canary  302
+/wp-admin/*                   /api/canary  302
+/admin/*                      /api/canary  302
+/.git/*                       /api/canary  302
+/phpinfo*                     /api/canary  302
+/config.json                  /api/canary  302
+/config.php                   /api/canary  302
+/config.xml                   /api/canary  302
+/config.yml                   /api/canary  302
+/config.yaml                  /api/canary  302
+/configs/*                    /api/canary  302
+/backup*                      /api/canary  302
 /.well-known/security.txt     /security.txt 200
 
-# SPA fallback — all unmatched routes serve index.html
-/*    /index.html    200
