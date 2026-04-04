@@ -14,7 +14,7 @@
 /* ──────────────────────────────────────────
    VERSIONS & CACHE NAMES
 ────────────────────────────────────────── */
-const SW_VERSION      = '1.1.0';
+const SW_VERSION      = '1.2.0';
 const CACHE_SHELL     = `miut-shell-v${SW_VERSION}`;    // App shell (never stale)
 const CACHE_STATIC    = `miut-static-v${SW_VERSION}`;   // Fonts, icons (long-lived)
 const CACHE_RUNTIME   = `miut-runtime-v${SW_VERSION}`;  // Firebase responses, etc.
@@ -64,11 +64,15 @@ const FIREBASE_HOSTS = [
   'firebaseinstallations.googleapis.com',
 ];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
-const CDN_HOSTS  = ['www.gstatic.com', 'cdn.jsdelivr.net', 'cdnjs.cloudflare.com'];
+const CDN_HOSTS  = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com'];
+// Firebase SDK scripts come from gstatic but must be treated as network-only (not cached)
+// so they always get fresh copies and are never intercepted with stale CSP contexts.
+const FIREBASE_SDK_HOST = 'www.gstatic.com';
 
 function isFirebase(url)  { return FIREBASE_HOSTS.some(h => url.hostname.includes(h)); }
 function isFont(url)      { return FONT_HOSTS.some(h => url.hostname.includes(h)); }
 function isCDN(url)       { return CDN_HOSTS.some(h => url.hostname.includes(h)); }
+function isFirebaseSDK(url) { return url.hostname === FIREBASE_SDK_HOST; }
 function isShell(url)     { return url.origin === self.location.origin; }
 function isImage(req)     { return req.destination === 'image'; }
 function isNavigation(req){ return req.mode === 'navigate'; }
@@ -108,12 +112,8 @@ self.addEventListener('install', event => {
       );
 
       console.log(`[SW] v${SW_VERSION} installed`);
-      // Issue 22 fix: Do NOT call skipWaiting() automatically on install.
-      // Activating mid-session can cause the old app.js state machine to
-      // receive events from a new SW serving different asset versions.
-      // skipWaiting is triggered only when the user taps the update banner
-      // (sw-bridge.js sends SKIP_WAITING message → handler below calls it).
-      // await self.skipWaiting();  ← intentionally removed
+      // Force immediate activation to replace any stale SW (e.g. one with broken CSP headers).
+      await self.skipWaiting();
     })()
   );
 });
@@ -181,6 +181,13 @@ self.addEventListener('fetch', event => {
   if (isFirebase(url)) {
     event.respondWith(networkOnly(req));
     return;
+  }
+
+  // Firebase SDK scripts (www.gstatic.com) — Network Only, never cached.
+  // Caching these causes the SW to re-fetch them under its own CSP context,
+  // which triggers connect-src violations. Let the browser handle them directly.
+  if (isFirebaseSDK(url)) {
+    return; // do not intercept — browser fetches normally
   }
 
   // Fonts & CDN — Cache First, very long TTL (they're immutable)
