@@ -36,21 +36,21 @@ const STORE_PRESENCE     = 'presence';
    NOTE: Relative paths work under any subdirectory (GitHub Pages).
 ────────────────────────────────────────── */
 const PRECACHE_REQUIRED = [
-  '/Miut/',
-  '/Miut/style.css',
-  '/Miut/app.js',
-  '/Miut/sw-bridge.js',
-  '/Miut/manifest.json',
+  '/',
+  '/style.css',
+  '/app.js',
+  '/sw-bridge.js',
+  '/manifest.json',
 
 ];
 
 // Everything here is silently skipped if missing — icons not committed yet, etc.
 const PRECACHE_OPTIONAL = [
-  '/Miut/offline.html',
-  '/Miut/icons/icon-192.png',
-  '/Miut/icons/icon-512.png',
-  '/Miut/icons/icon-maskable-192.png',
-  '/Miut/icons/icon-maskable-512.png',
+  '/offline.html',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-192.png',
+  '/icons/icon-maskable-512.png',
 ];
 
 /* ──────────────────────────────────────────

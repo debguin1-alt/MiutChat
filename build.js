@@ -39,12 +39,20 @@ fs.writeFileSync('/tmp/sw-bridge-build.js', swBridge);
 run(`${ESBUILD} /tmp/sw-bridge-build.js --minify --target=es2020 --platform=browser --outfile=dist/sw-bridge.min.js`);
 
 run(`${ESBUILD} sw.js --minify --target=es2020 --platform=browser --outfile=dist/sw.min.js`);
+run(`${ESBUILD} placeholder-rotator.js --minify --target=es2020 --platform=browser --outfile=dist/placeholder-rotator.min.js`);
 
 // ── Minify CSS ─────────────────────────────────────────────────────────────────
 run(`${ESBUILD} style.css --minify --outfile=dist/style.min.css`);
 
 // ── Copy static assets ─────────────────────────────────────────────────────────
-const STATIC = ['manifest.json', 'offline.html', '.nojekyll', 'firestore.rules', 'security.txt'];
+const STATIC = [
+  'manifest.json', 'offline.html', '.nojekyll', 'firestore.rules', 'security.txt',
+  // Cloudflare Pages routing / security — MUST be in dist/ or they are ignored
+  '_headers', '_redirects',
+  // Config and extracted scripts
+  'config.js', 'placeholder-rotator.js',
+  'wrangler.toml', 'CNAME',
+];
 for (const f of STATIC) {
   if (fs.existsSync(f)) {
     fs.copyFileSync(f, path.join(DIST, path.basename(f)));
@@ -60,18 +68,40 @@ for (const f of fs.readdirSync('icons')) {
 }
 console.log('> copied icons/');
 
+// ── Copy Cloudflare Pages Functions ────────────────────────────────────────────
+const functionsDir = path.join(DIST, 'functions');
+function copyDirRecursive(src, dest) {
+  if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath  = path.join(src,  entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+if (fs.existsSync('functions')) {
+  copyDirRecursive('functions', functionsDir);
+  console.log('> copied functions/');
+} else {
+  console.warn('! functions/ not found — edge functions will NOT be deployed');
+}
+
 // ── Patch index.html with minified references ──────────────────────────────────
 let html = fs.readFileSync('index.html', 'utf8');
 html = html
   .replace('"style.css"', '"style.min.css"')
   .replace('"db-manager.js"', '"db-manager.min.js"')
   .replace('"app.js"', '"app.min.js"')
-  .replace('"sw-bridge.js"', '"sw-bridge.min.js"');
+  .replace('"sw-bridge.js"', '"sw-bridge.min.js"')
+  .replace('"placeholder-rotator.js"', '"placeholder-rotator.min.js"');
 fs.writeFileSync(path.join(DIST, 'index.html'), html);
 console.log('> patched index.html');
 
 // ── Print sizes ────────────────────────────────────────────────────────────────
-const files = ['app.min.js', 'style.min.css', 'sw.min.js', 'db-manager.min.js'];
+const files = ['app.min.js', 'style.min.css', 'sw.min.js', 'db-manager.min.js', 'placeholder-rotator.min.js'];
 console.log('\n── Build complete ──────────────────────────────────');
 for (const f of files) {
   const p = path.join(DIST, f);

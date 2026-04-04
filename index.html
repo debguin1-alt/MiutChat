@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self';" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <!-- X-Frame-Options is enforced via the _headers HTTP header (meta has no effect) -->
   <meta http-equiv="Referrer-Policy" content="no-referrer" />
   <link rel="dns-prefetch" href="https://www.gstatic.com" />
   <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
@@ -554,44 +554,13 @@
        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
        style="display:none" onchange="handleFileAttach(event)" />
 
+<script src="config.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" defer></script>
 <script src="db-manager.min.js" defer></script>
 <script src="app.min.js" defer></script>
 <script src="sw-bridge.min.js" defer></script>
-<script>
-(function () {
-  function startRotatingPlaceholder(input) {
-    const list = JSON.parse(input.dataset.placeholders || '[]');
-    if (!list.length) return;
-    let idx = 0;
-
-    function rotate() {
-      if (document.activeElement === input || input.value) return;
-      // Fade out
-      input.classList.add('ph-fade');
-      setTimeout(function () {
-        idx = (idx + 1) % list.length;
-        input.placeholder = list[idx];
-        // Fade in
-        input.classList.remove('ph-fade');
-      }, 400);
-    }
-
-    setInterval(rotate, 2200);
-  }
-
-  function init() {
-    document.querySelectorAll('[data-placeholders]').forEach(startRotatingPlaceholder);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
-</script>
+<script src="placeholder-rotator.js" defer></script>
 </body>
 </html>

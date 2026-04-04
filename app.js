@@ -3,6 +3,51 @@
 (function (_W) {
 // script internals are now encapsulated — only window.X exports below are public.
 
+/* ── Global error telemetry ─────────────────────────────────────────────────
+ * Catches all uncaught JS errors and unhandled promise rejections.
+ * Reports to /api/csp-report (reuses the existing CF Function endpoint)
+ * with a distinct type so server logs can split CSP vs JS errors.
+ * Rate-limited to 5 reports per session to avoid flooding on bad states.
+ * ───────────────────────────────────────────────────────────────────────── */
+(function _installGlobalErrorHandlers() {
+  let _errReportCount = 0;
+  const _ERR_REPORT_LIMIT = 5;
+
+  function _reportError(detail) {
+    if (_errReportCount >= _ERR_REPORT_LIMIT) return;
+    _errReportCount++;
+    try {
+      navigator.sendBeacon('/api/csp-report', JSON.stringify({
+        type:      'js-error',
+        message:   String(detail.message  || '').slice(0, 300),
+        source:    String(detail.source   || '').slice(0, 200),
+        lineno:    detail.lineno   || 0,
+        colno:     detail.colno    || 0,
+        stack:     String(detail.stack    || '').slice(0, 500),
+        userAgent: navigator.userAgent.slice(0, 200),
+        href:      location.pathname,
+        ts:        Date.now(),
+      }));
+    } catch { /* sendBeacon may fail in some environments — never throw from error handler */ }
+  }
+
+  window.onerror = function (message, source, lineno, colno, error) {
+    console.error('[MIUT] Uncaught error:', message, { source, lineno, colno, error });
+    _reportError({ message, source, lineno, colno, stack: error?.stack });
+    return false; // let browser default handling proceed
+  };
+
+  window.addEventListener('unhandledrejection', function (ev) {
+    const reason = ev.reason;
+    const message = reason instanceof Error ? reason.message : String(reason);
+    console.error('[MIUT] Unhandled rejection:', message, reason);
+    _reportError({
+      message: 'UnhandledRejection: ' + message,
+      stack:   reason instanceof Error ? reason.stack : '',
+    });
+  });
+})();
+
 // DevTools. Full mitigation requires ES module migration (type="module") which
 // is a larger refactor outside this patch pass. The Firestore Security Rules
 // (firestore.rules) provide the authoritative server-side enforcement regardless.
@@ -60,25 +105,39 @@ let _authReady = null;
 // NOT the ES module syntax (import { getAuth } from "firebase/auth") — that needs a bundler.
 async function ensureAuth() {
   if (_authReady) return _authReady;
-  _authReady = new Promise((resolve, reject) => {
-    try {
-      const authApp  = firebase.app('miut-db0');
-      const authInst = firebase.auth(authApp);
-      const unsub = authInst.onAuthStateChanged(user => {
-        unsub();
-        if (user) { resolve(user.uid); return; }
-        authInst.signInAnonymously()
-          .then(cred => resolve(cred.user.uid))
-          .catch(err => {
-            _authReady = null;
-            reject(err);
-          });
-      }, err => { _authReady = null; reject(err); });
-    } catch (err) {
-      _authReady = null;
-      reject(err);
+  _authReady = (async () => {
+    // Wait for db-manager.js to confirm Firebase compat SDK is loaded and
+    // all app instances are initialised before touching firebase.* APIs.
+    // _dbFirebaseReady is set by db-manager.js (deferred, runs before app.js).
+    if (window._dbFirebaseReady) {
+      await window._dbFirebaseReady;
+    } else {
+      // Fallback: yield to the microtask queue once to let deferred scripts settle.
+      await Promise.resolve();
+      if (typeof firebase === 'undefined') {
+        throw new Error('Firebase SDK not available — check that gstatic.com is reachable.');
+      }
     }
-  });
+    return new Promise((resolve, reject) => {
+      try {
+        const authApp  = firebase.app('miut-db0');
+        const authInst = firebase.auth(authApp);
+        const unsub = authInst.onAuthStateChanged(user => {
+          unsub();
+          if (user) { resolve(user.uid); return; }
+          authInst.signInAnonymously()
+            .then(cred => resolve(cred.user.uid))
+            .catch(err => {
+              _authReady = null;
+              reject(err);
+            });
+        }, err => { _authReady = null; reject(err); });
+      } catch (err) {
+        _authReady = null;
+        reject(err);
+      }
+    });
+  })().catch(err => { _authReady = null; throw err; });
   return _authReady;
 }
 
@@ -743,12 +802,56 @@ function _getRlWaitMs(type) {
   return Math.max(0, cfg.refillMs - (sinceRefill % cfg.refillMs));
 }
 
-function checkRateLimit(type) {
-  if (_consumeToken(type)) return true;
-  const waitMs = _getRlWaitMs(type);
-  _startCountdown(waitMs, type);
-  showError('');
-  return false;
+/* ── Edge-backed rate limiter ─────────────────────────────────────────────
+ * Two-layer approach:
+ *  1. localStorage token bucket  — instant, local, bypassable by incognito
+ *  2. Edge KV token bucket       — server-side per-IP, bypasses incognito/curl
+ * The local check acts as a fast pre-check to avoid unnecessary edge calls.
+ * The edge check is the authoritative limit — it runs in parallel and
+ * blocks the action if the edge returns 429, even if local tokens remain.
+ * ──────────────────────────────────────────────────────────────────────── */
+async function checkRateLimit(type) {
+  // Fast path: local token consumed — skip edge call for obvious over-use
+  const localAllowed = _consumeToken(type);
+  if (!localAllowed) {
+    const waitMs = _getRlWaitMs(type);
+    _startCountdown(waitMs, type);
+    showError('');
+    return false;
+  }
+
+  // Slow path: authoritative edge check (IP-based, KV-backed, incognito-proof)
+  try {
+    const res = await fetch('/api/rate-limit', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: type }),
+      // Short timeout — if edge is unavailable, fall through to local-only
+      signal:  AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined,
+    });
+
+    if (res.status === 429) {
+      const data = await res.json().catch(() => ({}));
+      const retryAfterSec = parseInt(res.headers.get('Retry-After') || '30', 10);
+      _startCountdown(retryAfterSec * 1000, type);
+      showError('');
+      console.warn(`[MIUT] Edge rate limit hit for "${type}":`, data.reason);
+      return false;
+    }
+
+    if (!res.ok) {
+      // Non-429 error from edge (500, etc.) — log and allow locally so a
+      // temporary edge outage does not block all users
+      console.warn(`[MIUT] Edge rate-limit check returned ${res.status} — falling back to local check`);
+    }
+  } catch (err) {
+    // Network error or timeout — fall through to local-only mode
+    if (err.name !== 'AbortError') {
+      console.warn('[MIUT] Edge rate-limit unreachable, using local check:', err.message);
+    }
+  }
+
+  return true;
 }
 
 // Wrong-code lockout — persisted across reloads
@@ -932,12 +1035,16 @@ window.addEventListener('DOMContentLoaded', () => {
   // db is set to the correct shard on room join/create via getDb(roomCode).
   // We set a default here so code that accesses db before joining (rare)
   // doesn't throw — it will be overwritten by the first getDb() call.
-  try {
-    // Just grab the primary instance as the default `db` reference.
-    db = firebase.firestore(firebase.app('miut-db0'));
-  } catch (e) {
-    console.warn('[App] Could not set default db reference:', e.message);
-  }
+  // Await _dbFirebaseReady to ensure the compat SDK has loaded before use.
+  (window._dbFirebaseReady || Promise.resolve()).then(() => {
+    try {
+      db = firebase.firestore(firebase.app('miut-db0'));
+    } catch (e) {
+      console.warn('[App] Could not set default db reference:', e.message);
+    }
+  }).catch(err => {
+    console.error('[App] Firebase unavailable at startup:', err.message);
+  });
 
 
 

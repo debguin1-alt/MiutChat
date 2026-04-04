@@ -1,1 +1,4 @@
-miutchat.pages.dev
+# CNAME is only needed for a custom domain (e.g. chat.yourdomain.com).
+# miutchat.pages.dev is a Cloudflare-managed subdomain — no CNAME required.
+# Uncomment and replace the line below when you have a custom domain:
+# chat.yourdomain.com

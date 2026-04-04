@@ -22,16 +22,29 @@
 const _DB_CONFIGS = [
 
   /* ── Database 0 — Primary (active) ────────────────────────── */
+  /*
+   * Config is injected at runtime via config.js → window.__NX_CONFIG__.
+   * This keeps credentials out of source control while staying compatible
+   * with the compat SDK (no bundler required).
+   * Falls back to empty strings which will cause Firebase to throw a clear
+   * error rather than silently using wrong credentials.
+   */
   {
     name:   'miut-db0',
     active: true,
-    config: {
-      apiKey:            'AIzaSyCoPJjVzwaaZBgvz-P4vGJ44muNS51qqeg',
-      authDomain:        'tuition-fee-management-4e15e.firebaseapp.com',
-      projectId:         'tuition-fee-management-4e15e',
-      messagingSenderId: '1093461316314',
-      appId:             '1:1093461316314:web:c06be1b4165f0cfadc0be3',
-    },
+    config: (() => {
+      const nx = (typeof window !== 'undefined' && window.__NX_CONFIG__) || {};
+      if (!nx.apiKey) {
+        console.error('[Miut DB] window.__NX_CONFIG__ not found — did config.js load? Check index.html script order.');
+      }
+      return {
+        apiKey:            nx.apiKey            || '',
+        authDomain:        nx.authDomain        || '',
+        projectId:         nx.projectId         || '',
+        messagingSenderId: nx.messagingSenderId || '',
+        appId:             nx.appId             || '',
+      };
+    })(),
   },
 
   /* ── Database 1 — Add when ready ─────────────────────────── */
@@ -194,7 +207,50 @@ function resetDbHealth(name) {
   _roomDbCache.clear();
 }
 
-/* ── Pre-warm all active Firebase app instances on load ───────── */
-_ACTIVE_DBS.forEach(cfg => { try { _initDb(cfg); } catch {} });
+/* ── Firebase-ready guard ─────────────────────────────────────────
+ * The compat SDK scripts are loaded with defer, guaranteeing they run
+ * before db-manager.js and app.js (defer preserves source order).
+ * This guard catches the edge case where an external CDN script fails
+ * to load (network error, ad-blocker, etc.) and surfaces a clear error
+ * instead of a cryptic "firebase is not defined" cascade.
+ * window._dbFirebaseReady resolves to true when all instances are warm,
+ * or rejects with a descriptive error if Firebase is unavailable.
+ * ──────────────────────────────────────────────────────────────── */
+window._dbFirebaseReady = new Promise((resolve, reject) => {
+  function tryInit() {
+    if (typeof firebase === 'undefined') {
+      reject(new Error(
+        '[Miut DB] Firebase compat SDK not loaded. ' +
+        'Check that gstatic.com is reachable and not blocked by an extension.'
+      ));
+      return;
+    }
+    try {
+      _ACTIVE_DBS.forEach(cfg => { try { _initDb(cfg); } catch {} });
+      console.log(`[Miut DB] ${_ACTIVE_DBS.length} active database(s): ${_ACTIVE_DBS.map(d => d.name).join(', ')}`);
+      resolve(true);
+    } catch (err) {
+      reject(err);
+    }
+  }
 
-console.log(`[Miut DB] ${_ACTIVE_DBS.length} active database(s): ${_ACTIVE_DBS.map(d => d.name).join(', ')}`);
+  // Scripts are deferred — DOMContentLoaded guarantees they've executed.
+  // But if somehow we run before that (e.g. async injection), wait for it.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryInit, { once: true });
+  } else {
+    tryInit();
+  }
+});
+
+window._dbFirebaseReady.catch(err => {
+  console.error('[Miut DB] Fatal:', err.message);
+  // Surface a visible banner so developers immediately see the issue
+  const banner = document.createElement('div');
+  banner.setAttribute('style',
+    'position:fixed;top:0;left:0;right:0;z-index:99999;padding:12px 16px;' +
+    'background:#7f1d1d;color:#fecaca;font:13px/1.5 monospace;text-align:center'
+  );
+  banner.textContent = '⚠ Firebase failed to load — check browser extensions or network. ' + err.message;
+  document.body?.appendChild(banner);
+});
