@@ -42,7 +42,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 input,textarea{font-family:inherit;color:inherit;-webkit-user-select:text;user-select:text}
 textarea{resize:none}
 img{display:block;max-width:100%}
-button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;touch-action:manipulation}
 @media print{body{display:none!important}}
 
 /* ─── SCREEN TRANSITIONS ─────────────────────────────────── */
@@ -92,7 +92,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   50%{transform:scale(1.05);filter:drop-shadow(0 0 30px rgba(78,205,196,.75))}
 }
 .splash-title{font-family:var(--fui);font-size:2.5rem;font-weight:800;letter-spacing:8px;color:#fff;text-shadow:0 0 32px rgba(78,205,196,.4),0 2px 8px rgba(0,0,0,.4)}
-.splash-sub{font-size:.67rem;letter-spacing:2.5px;color:var(--text2);margin-top:-8px}
+.splash-sub{font-size:.67rem;letter-spacing:2.5px;color:var(--text2);margin-top:-8px;text-align:center;padding:0 16px;width:100%}
 
 /* ─── SHARED LOGO ────────────────────────────────────────── */
 .miut-logo-sm-img{
@@ -141,27 +141,27 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   box-shadow:0 0 0 3px var(--teal-glow);
   transform:scaleY(1.015)
 }
-.input-icon{display:flex;align-items:center;justify-content:center;padding:0 14px;color:var(--teal);flex-shrink:0;transition:transform var(--fast) var(--spring)}
+.input-icon{display:flex;align-items:center;justify-content:center;padding:0 14px;color:var(--teal);flex-shrink:0;align-self:stretch;transition:transform var(--fast) var(--spring)}
 .input-wrap:focus-within .input-icon{transform:scale(1.15)}
-.input-wrap input{flex:1;padding:13px 10px 13px 0;background:transparent;border:none;outline:none;color:var(--text);font-size:.87rem;letter-spacing:.3px}
+.input-wrap input{flex:1;padding:13px 8px 13px 4px;background:transparent;border:none;outline:none;color:var(--text);font-size:.87rem;letter-spacing:.3px}
 .input-wrap input::placeholder{color:var(--text2);font-size:.81rem;transition:opacity .3s ease}
 .input-wrap input:focus::placeholder{opacity:.5}
 .input-wrap input.ph-fade::placeholder{opacity:0}
 
-.toggle-pw{display:flex;align-items:center;justify-content:center;padding:0 14px;color:var(--text2);flex-shrink:0;transition:color var(--fast) ease,transform var(--fast) var(--spring)}
+.toggle-pw{display:flex;align-items:center;justify-content:center;padding:0 14px;color:var(--text2);flex-shrink:0;align-self:stretch;min-width:44px;touch-action:manipulation;transition:color var(--fast) ease,transform var(--fast) var(--spring)}
 .toggle-pw:hover{color:var(--teal);transform:scale(1.15)}
 .toggle-pw:active{transform:scale(.88)}
 
 .code-hint{font-size:.63rem;color:var(--text2);letter-spacing:.3px;line-height:1.6;margin-top:4px}
-.entropy-bar-wrap{display:flex;align-items:center;gap:10px;margin-top:5px}
-.entropy-bar{flex:1;height:3px;border-radius:3px;background:var(--border);overflow:hidden}
-.entropy-fill{height:100%;border-radius:3px;width:0;transition:width .45s var(--out),background .45s ease}
-.entropy-label{font-size:.58rem;letter-spacing:1.5px;color:var(--text2);font-family:var(--fui);white-space:nowrap}
+.entropy-bar-wrap{display:flex;align-items:center;gap:10px;margin-top:8px;animation:nx-in .22s var(--out) both}
+.entropy-bar{flex:1;height:6px;border-radius:6px;background:var(--border);overflow:hidden}
+.entropy-fill{height:100%;border-radius:6px;width:0;transition:width .35s var(--out),background .25s ease}
+.entropy-label{font-size:.72rem;letter-spacing:2px;font-family:var(--fui);font-weight:700;white-space:nowrap;transition:color .25s ease}
 
 .join-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r);padding:4px}
 .join-tab-btn{
   display:flex;align-items:center;justify-content:center;gap:7px;
-  padding:11px 8px;border-radius:6px;background:transparent;color:var(--text2);
+  padding:12px 8px;border-radius:6px;background:transparent;color:var(--text2);min-height:44px;touch-action:manipulation;
   font-family:var(--fui);font-size:.59rem;font-weight:700;letter-spacing:2px;
   transition:color var(--fast) var(--out),background var(--fast) var(--out),transform var(--fast) var(--spring)
 }
@@ -178,11 +178,12 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .tab-info-box{display:flex;align-items:flex-start;gap:10px;background:var(--teal-dim);border:1px solid var(--teal-border);border-radius:var(--r);padding:12px 14px;font-size:.7rem;color:var(--text2);line-height:1.65}
 
 .btn-join{
-  position:relative;overflow:hidden;padding:14px 20px;
+  position:relative;overflow:hidden;padding:16px 20px;
   background:linear-gradient(135deg,var(--teal) 0%,#3bbfb6 100%);
   border-radius:var(--r);color:var(--bg);
   font-family:var(--fui);font-size:.77rem;font-weight:800;letter-spacing:3px;
   box-shadow:0 4px 20px rgba(78,205,196,.28);
+  min-height:52px;touch-action:manipulation;
   transition:transform var(--fast) var(--spring),box-shadow var(--fast) var(--out),filter var(--fast) ease
 }
 .btn-join:hover:not(:disabled){transform:translateY(-2px) scale(1.012);box-shadow:0 8px 30px rgba(78,205,196,.45);filter:brightness(1.06)}

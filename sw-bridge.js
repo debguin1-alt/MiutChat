@@ -21,7 +21,6 @@
       updateViaCache: 'none',
     });
 
-    console.log('[Bridge] SW registered, scope:', reg.scope);
 
     reg.update();
     setInterval(() => reg.update(), 5 * 60 * 1000);
@@ -61,7 +60,6 @@ navigator.serviceWorker.addEventListener('message', event => {
   const { type, version } = event.data || {};
   switch (type) {
     case 'SW_UPDATED':
-      console.log('[Bridge] SW updated to v' + version);
       break;
     case 'DRAIN_OUTBOX':
     case 'SYNC_PRESENCE':
@@ -145,4 +143,3 @@ window.getSWVersion = async function() {
   });
 };
 
-console.log('[Bridge] Miut v1 loaded');

@@ -700,6 +700,17 @@ function updateEntropyMeter(code) {
   label.style.color     = meta.color;
 }
 
+// Belt-and-suspenders: also wire a native DOM listener so Android virtual
+// keyboards that swallow oninput HTML attributes still trigger the meter.
+// Called once after DOM is ready (DOMContentLoaded fires before this via defer).
+function _wireEntropyListeners() {
+  const el = $('input-create-code');
+  if (!el) return;
+  ['input', 'keyup', 'compositionend'].forEach(ev => {
+    el.addEventListener(ev, function () { updateEntropyMeter(el.value); });
+  });
+}
+
 // Map Firebase error codes → { title, detail, icon, type }
 // type: 'network' | 'auth' | 'quota' | 'permission' | 'notfound' | 'unknown'
 const _ERROR_MAP = {
@@ -835,19 +846,16 @@ async function checkRateLimit(type) {
       const retryAfterSec = parseInt(res.headers.get('Retry-After') || '30', 10);
       _startCountdown(retryAfterSec * 1000, type);
       showError('');
-      console.warn(`[MIUT] Edge rate limit hit for "${type}":`, data.reason);
       return false;
     }
 
     if (!res.ok) {
       // Non-429 error from edge (500, etc.) — log and allow locally so a
       // temporary edge outage does not block all users
-      console.warn(`[MIUT] Edge rate-limit check returned ${res.status} — falling back to local check`);
     }
   } catch (err) {
     // Network error or timeout — fall through to local-only mode
     if (err.name !== 'AbortError') {
-      console.warn('[MIUT] Edge rate-limit unreachable, using local check:', err.message);
     }
   }
 
@@ -1005,6 +1013,28 @@ function saveRoom(c)   { localStorage.setItem(CONFIG.ROOM_KEY, c); }
 function loadRoom()    { return localStorage.getItem(CONFIG.ROOM_KEY); }
 
 window.addEventListener('DOMContentLoaded', () => {
+  _wireEntropyListeners();
+  // ── Rotating placeholder text (CSP-safe, moved from inline HTML script) ──
+  (function initRotatingPlaceholders() {
+    function rotatePlaceholder(input) {
+      var list;
+      try { list = JSON.parse(input.dataset.placeholders || '[]'); } catch { return; }
+      if (!list.length) return;
+      var idx = 0;
+      setInterval(function () {
+        if (document.activeElement === input || input.value) return;
+        input.classList.add('ph-fade');
+        setTimeout(function () {
+          idx = (idx + 1) % list.length;
+          input.placeholder = list[idx];
+          input.classList.remove('ph-fade');
+        }, 400);
+      }, 2200);
+    }
+    document.querySelectorAll('[data-placeholders]').forEach(rotatePlaceholder);
+  })();
+
+
   // ── Offline / online banner ─────────────────────────────────────────────
   function _updateOnlineBanner() {
     let b = document.getElementById('offline-banner');
@@ -1022,7 +1052,6 @@ window.addEventListener('DOMContentLoaded', () => {
   _updateOnlineBanner();
 
   // Start anonymous auth immediately — warm up the JWT before any room action.
-  ensureAuth().catch(err => console.warn('[MIUT] Initial auth failed:', err.message));
 
   // Prefs
   try {
@@ -1040,7 +1069,6 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
       db = firebase.firestore(firebase.app('miut-db0'));
     } catch (e) {
-      console.warn('[App] Could not set default db reference:', e.message);
     }
   }).catch(err => {
     console.error('[App] Firebase unavailable at startup:', err.message);
@@ -1755,7 +1783,6 @@ async function fetchHistoryOnce(code) {
     // Show "load earlier" button if there are more messages
     if (!_lastCachedTs) _updateLoadEarlierBtn();
   } catch (e) {
-    console.warn('[fetchHistoryOnce] Failed:', e.message);
   }
 }
 
@@ -1793,7 +1820,6 @@ async function loadEarlierMessages() {
     // Preserve scroll position after prepending
     if (area) area.scrollTop += (area.scrollHeight - prevScrollHeight);
   } catch (e) {
-    console.warn('[loadEarlierMessages] Failed:', e.message);
   } finally {
     _updateLoadEarlierBtn();
   }
@@ -2760,7 +2786,6 @@ async function toggleReaction(docId, emoji) {
       tx.update(ref, { reactions });
     });
   } catch (e) {
-    console.warn('[toggleReaction] Transaction failed:', e.message);
   }
 }
 
@@ -3643,7 +3668,7 @@ window.addEventListener('appinstalled', () => {
 
 // ── Public API — only these names escape the IIFE onto window ─────────────────
 Object.assign(_W, {
-  switchJoinTab, handleCreate, handleEnter, toggleVis, updateEntropyMeter,
+  switchJoinTab, handleCreate, handleEnter, toggleVis, updateEntropyMeter, _wireEntropyListeners,
   cancelJoinRequest, checkInviteCode, joinFromInvite, cancelInvite,
   handleLogout, openSettings, closeSettings, closeModal, saveSettings,
   toggleSoundAlerts, toggleAnimations, toggleApprovalGate, rotateKey,

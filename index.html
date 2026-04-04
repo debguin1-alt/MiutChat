@@ -5,6 +5,7 @@
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <!-- X-Frame-Options is enforced via the _headers HTTP header (meta has no effect) -->
   <meta http-equiv="Referrer-Policy" content="no-referrer" />
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=()" />
   <link rel="dns-prefetch" href="https://www.gstatic.com" />
   <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
   <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
@@ -105,7 +106,7 @@
                    placeholder="e.g. MIUT42"
                    data-placeholders='["e.g. MIUT42","e.g. 482910","e.g. HAWK42","e.g. STORM9","e.g. ALPHA7","e.g. 007XYZ"]'
                    maxlength="32" autocomplete="off" spellcheck="false"
-                   oninput="updateEntropyMeter(this.value)" />
+                   oninput="updateEntropyMeter(this.value)" onkeyup="updateEntropyMeter(this.value)" onchange="updateEntropyMeter(this.value)" />
             <button class="toggle-pw ripple-btn" id="create-eye-btn"
                     onclick="toggleVis('input-create-code','create-eye-btn')" title="Show/hide">
               <svg class="eye-open" viewBox="0 0 20 20" fill="none" width="16" height="16">
@@ -562,10 +563,7 @@
 
 <input type="file" id="file-input"
        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-       style="display:none" onchange="handleFileAttach(event)" />
-
-<script src="config.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+       style="display:none" onchange="handleFileAttach(event)" /><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="db-manager.min.js" defer></script>

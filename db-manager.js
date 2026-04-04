@@ -35,7 +35,6 @@ const _DB_CONFIGS = [
     config: (() => {
       const nx = (typeof window !== 'undefined' && window.__NX_CONFIG__) || {};
       if (!nx.apiKey) {
-        console.error('[Miut DB] window.__NX_CONFIG__ not found — did config.js load? Check index.html script order.');
       }
       return {
         apiKey:            nx.apiKey            || '',
@@ -132,7 +131,6 @@ function _onFail(name, err) {
   h.fails++;
   h.lastErr = err?.message ?? String(err);
   h.cooldownUntil = Date.now() + (_COOLDOWNS[Math.min(h.fails - 1, _COOLDOWNS.length - 1)]);
-  console.warn(`[Miut DB] ${name} unhealthy (fail #${h.fails}): ${h.lastErr}`);
 }
 
 /* ── Core: resolve the best database for a room code ────────── */
@@ -171,7 +169,6 @@ async function getDb(roomCode) {
       ]);
       _onSuccess(cfg.name);
       _roomDbCache.set(roomCode, cfg.name);
-      console.log(`[Miut DB] "${roomCode}" → ${cfg.name}`);
       return fs;
     } catch (err) {
       _onFail(cfg.name, err);
@@ -180,7 +177,6 @@ async function getDb(roomCode) {
 
   /* All failed — return primary as last resort */
   const fallback = _ACTIVE_DBS[_hashRoom(roomCode)];
-  console.error('[Miut DB] All databases unavailable. Using primary as last resort.');
   return _instances.get(fallback.name) ?? _initDb(fallback);
 }
 
@@ -227,7 +223,6 @@ window._dbFirebaseReady = new Promise((resolve, reject) => {
     }
     try {
       _ACTIVE_DBS.forEach(cfg => { try { _initDb(cfg); } catch {} });
-      console.log(`[Miut DB] ${_ACTIVE_DBS.length} active database(s): ${_ACTIVE_DBS.map(d => d.name).join(', ')}`);
       resolve(true);
     } catch (err) {
       reject(err);
@@ -244,7 +239,6 @@ window._dbFirebaseReady = new Promise((resolve, reject) => {
 });
 
 window._dbFirebaseReady.catch(err => {
-  console.error('[Miut DB] Fatal:', err.message);
   // Surface a visible banner so developers immediately see the issue
   const banner = document.createElement('div');
   banner.setAttribute('style',

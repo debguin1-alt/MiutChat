@@ -35,22 +35,29 @@ const STORE_PRESENCE     = 'presence';
    OPTIONAL: cached if present, silently skipped if missing.
    NOTE: Relative paths work under any subdirectory (GitHub Pages).
 ────────────────────────────────────────── */
-const PRECACHE_REQUIRED = [
-  '/',
-  '/style.css',
-  '/app.js',
-  '/sw-bridge.js',
-  '/manifest.json',
+// Dynamic base path — handles both Cloudflare Pages (scope='/') and
+// GitHub Pages (scope='/Miut/') without any code change on deploy.
+const BASE = (() => {
+  try { return new URL(self.registration.scope).pathname; }
+  catch { return '/'; }
+})();
 
+const PRECACHE_REQUIRED = [
+  BASE,
+  BASE + 'style.min.css',
+  BASE + 'app.min.js',
+  BASE + 'db-manager.min.js',
+  BASE + 'sw-bridge.min.js',
+  BASE + 'manifest.json',
 ];
 
-// Everything here is silently skipped if missing — icons not committed yet, etc.
+// Silently skipped if missing.
 const PRECACHE_OPTIONAL = [
-  '/offline.html',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/icon-maskable-192.png',
-  '/icons/icon-maskable-512.png',
+  BASE + 'offline.html',
+  BASE + 'icons/icon-192.png',
+  BASE + 'icons/icon-512.png',
+  BASE + 'icons/icon-maskable-192.png',
+  BASE + 'icons/icon-maskable-512.png',
 ];
 
 /* ──────────────────────────────────────────
@@ -111,7 +118,6 @@ self.addEventListener('install', event => {
         })
       );
 
-      console.log(`[SW] v${SW_VERSION} installed`);
       // Force immediate activation to replace any stale SW (e.g. one with broken CSP headers).
       await self.skipWaiting();
     })()
@@ -130,7 +136,6 @@ self.addEventListener('activate', event => {
         keys
           .filter(key => !ALL_CACHES.includes(key))
           .map(key => {
-            console.log(`[SW] Deleting old cache: ${key}`);
             return caches.delete(key);
           })
       );
@@ -144,7 +149,6 @@ self.addEventListener('activate', event => {
           await self.registration.periodicSync.register(PERIODIC_SYNC_TAG, {
             minInterval: 5 * 60 * 1000,
           });
-          console.log('[SW] Periodic sync registered');
         } catch {
           // Expected on most browsers — requires "periodic-background-sync" permission
           // which is only granted for installed PWAs on Android Chrome. Not an error.
@@ -157,7 +161,6 @@ self.addEventListener('activate', event => {
         client.postMessage({ type: 'SW_UPDATED', version: SW_VERSION })
       );
 
-      console.log(`[SW] v${SW_VERSION} activated`);
     })()
   );
 });
@@ -377,7 +380,6 @@ async function drainOutbox() {
   const messages = await idbGetAll(STORE_OUTBOX);
   if (!messages.length) return;
 
-  console.log(`[SW] Draining ${messages.length} queued messages`);
 
   for (const msg of messages) {
     try {
@@ -409,7 +411,6 @@ self.addEventListener('periodicsync', event => {
         if (clients.length > 0) {
           clients.forEach(c => c.postMessage({ type: 'PERIODIC_HEARTBEAT' }));
         }
-        console.log('[SW] Periodic heartbeat fired');
       })()
     );
   }
@@ -652,4 +653,3 @@ async function broadcastToClients(message) {
   clients.forEach(c => c.postMessage(message));
 }
 
-console.log(`[SW] Miut Service Worker v${SW_VERSION} loaded`);

@@ -73,5 +73,31 @@
     "communication",
     "social",
     "utilities"
+  ],
+  "shortcuts": [
+    {
+      "name": "Create Room",
+      "short_name": "Create",
+      "url": "/?action=create",
+      "icons": [
+        {
+          "src": "icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Join Room",
+      "short_name": "Join",
+      "url": "/?action=join",
+      "icons": [
+        {
+          "src": "icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }
