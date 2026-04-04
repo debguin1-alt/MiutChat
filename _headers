@@ -17,8 +17,9 @@
 
   # ── Content Security Policy ───────────────────────────────────────────────────
   # 'unsafe-hashes' is required to allow onclick/oninput inline event handlers
-  # connect-src includes gstatic so the service worker can fetch Firebase SDK scripts
-  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-hashes' https://www.gstatic.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'
+  # apis.google.com is needed for Firebase Auth iframe (separate from *.googleapis.com)
+  # fonts.gstatic.com in connect-src covers font preload/fetch requests
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-hashes' https://www.gstatic.com https://www.googleapis.com https://apis.google.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com https://apis.google.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' blob: data: https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://apis.google.com https://*.firebaseapp.com; form-action 'none'; frame-ancestors 'none'; base-uri 'self'
 
   # ── Cache: HTML never cached, assets cached 1 year ───────────────────────────
   Cache-Control: no-store, no-cache, must-revalidate

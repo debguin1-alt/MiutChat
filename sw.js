@@ -14,7 +14,7 @@
 /* ──────────────────────────────────────────
    VERSIONS & CACHE NAMES
 ────────────────────────────────────────── */
-const SW_VERSION      = '1.2.0';
+const SW_VERSION      = '1.3.0';
 const CACHE_SHELL     = `miut-shell-v${SW_VERSION}`;    // App shell (never stale)
 const CACHE_STATIC    = `miut-static-v${SW_VERSION}`;   // Fonts, icons (long-lived)
 const CACHE_RUNTIME   = `miut-runtime-v${SW_VERSION}`;  // Firebase responses, etc.
@@ -169,30 +169,20 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
 
+  // ── Only intercept same-origin requests ──────────────────────────────────────
+  // External fetches (fonts, Firebase SDKs, APIs) must pass through unmodified.
+  // If the SW calls fetch() on external URLs, the page CSP applies to the SW
+  // context and blocks them with connect-src violations. The browser handles
+  // external requests natively without CSP interference when we don't intercept.
+  if (url.origin !== self.location.origin) {
+    return; // do not call event.respondWith() — browser handles it directly
+  }
+
   // Never intercept non-GET except for POST to share-target
   if (req.method !== 'GET') {
     if (req.method === 'POST' && url.pathname === '/share-target') {
       event.respondWith(handleShareTarget(req));
     }
-    return;
-  }
-
-  // Firebase — Network Only (real-time data must be fresh)
-  if (isFirebase(url)) {
-    event.respondWith(networkOnly(req));
-    return;
-  }
-
-  // Firebase SDK scripts (www.gstatic.com) — Network Only, never cached.
-  // Caching these causes the SW to re-fetch them under its own CSP context,
-  // which triggers connect-src violations. Let the browser handle them directly.
-  if (isFirebaseSDK(url)) {
-    return; // do not intercept — browser fetches normally
-  }
-
-  // Fonts & CDN — Cache First, very long TTL (they're immutable)
-  if (isFont(url) || isCDN(url)) {
-    event.respondWith(cacheFirst(req, CACHE_STATIC, { ttl: 365 * 24 * 60 * 60 }));
     return;
   }
 
