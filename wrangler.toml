@@ -5,11 +5,11 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "MIUT_RL"
-id      = "REPLACE_WITH_YOUR_MIUT_RL_ID"
+id      = "df952ff50bb6499e915809b76c754d8f"
 
 [[kv_namespaces]]
 binding = "MIUT_BAN"
-id      = "REPLACE_WITH_YOUR_MIUT_BAN_ID"
+id      = "60802b14aec24f83b4c47752f76c8c8e"
 
 [vars]
 MIUT_VERSION  = "3.0.0"
