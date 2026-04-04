@@ -18,10 +18,7 @@
   # ── Content Security Policy — tightest possible for this app ─────────────────
   # Removes unsafe-inline from style-src by using a nonce (injected by CF Function)
   # connect-src includes identitytoolkit + securetoken for Firebase Auth
-  Content-Security-Policy: default-src 'none'; script-src 'self' https://www.gstatic.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; report-uri /api/csp-report; report-to csp-endpoint
-
-  # ── Report-To header for CSP reporting API ────────────────────────────────────
-  Report-To: {"group":"csp-endpoint","max_age":86400,"endpoints":[{"url":"/api/csp-report"}]}
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://www.gstatic.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'
 
   # ── Cache: HTML never cached, assets cached 1 year ───────────────────────────
   Cache-Control: no-store, no-cache, must-revalidate
