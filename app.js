@@ -1012,7 +1012,121 @@ function loadSession() { try { return JSON.parse(localStorage.getItem(CONFIG.SES
 function saveRoom(c)   { localStorage.setItem(CONFIG.ROOM_KEY, c); }
 function loadRoom()    { return localStorage.getItem(CONFIG.ROOM_KEY); }
 
+
+// ── Wire all static HTML event handlers (CSP-safe: no inline onclick/oninput) ─
+// Called from DOMContentLoaded. All functions are already on window via Object.assign.
+function _wireAllHandlers() {
+  // ── Helper: safe getElementById ──────────────────────────────────────────────
+  function el(id) { return document.getElementById(id); }
+  function on(id, evt, fn, opts) {
+    const e = el(id); if (e) e.addEventListener(evt, fn, opts);
+  }
+  function onQ(sel, evt, fn) {
+    document.querySelectorAll(sel).forEach(e => e.addEventListener(evt, fn));
+  }
+
+  // ── Join screen tabs ──────────────────────────────────────────────────────────
+  onQ('[data-tab="create"]', 'click', () => switchJoinTab('create'));
+  onQ('[data-tab="enter"]',  'click', () => switchJoinTab('enter'));
+
+  // ── Create room ───────────────────────────────────────────────────────────────
+  on('input-create-code', 'input',  e => updateEntropyMeter(e.target.value));
+  on('input-create-code', 'keyup',  e => updateEntropyMeter(e.target.value));
+  on('input-create-code', 'change', e => updateEntropyMeter(e.target.value));
+  on('input-create-code', 'compositionend', e => updateEntropyMeter(e.target.value));
+  on('create-eye-btn', 'click', () => toggleVis('input-create-code', 'create-eye-btn'));
+  on('btn-create',     'click', () => handleCreate());
+
+  // ── Enter room ────────────────────────────────────────────────────────────────
+  on('enter-eye-btn', 'click', () => toggleVis('input-room-code', 'enter-eye-btn'));
+  on('btn-enter',     'click', () => handleEnter());
+
+  // ── Enter room: Enter key ─────────────────────────────────────────────────────
+  on('input-room-code', 'keydown', e => { if (e.key === 'Enter') handleEnter(); });
+
+  // ── Waiting screen ────────────────────────────────────────────────────────────
+  on('btn-waiting-cancel', 'click', () => cancelJoinRequest());
+
+  // ── Invite screen ─────────────────────────────────────────────────────────────
+  on('invite-code-input', 'input',   e => checkInviteCode(e.target));
+  on('invite-code-input', 'keydown', e => { if (e.key === 'Enter') joinFromInvite(); });
+  on('invite-vis-btn',    'click',   () => toggleVis('invite-code-input', 'invite-vis-btn'));
+  on('invite-join-btn',   'click',   () => joinFromInvite());
+
+  // ── Invite back / cancel ──────────────────────────────────────────────────────
+  const backBtns = document.querySelectorAll('.btn-invite-back');
+  backBtns.forEach(b => b.addEventListener('click', () => cancelInvite()));
+
+  // ── Sidebar ───────────────────────────────────────────────────────────────────
+  on('room-code-pill',   'click', () => copyRoomCode());
+  on('share-room-btn',   'click', () => shareRoomLink());
+  on('settings-btn',     'click', () => openSettings());
+  on('btn-logout',       'click', () => handleLogout());
+  on('hamburger-btn',    'click', () => toggleSidebar());
+  on('sidebar-overlay',  'click', () => closeSidebar());
+
+  // ── Chat header ───────────────────────────────────────────────────────────────
+  on('search-btn', 'click', () => toggleSearch());
+  // Copy room code button in header (second copy button, no id)
+  document.querySelectorAll('.chat-header .icon-btn').forEach(btn => {
+    if (btn.id === 'search-btn' || btn.id === 'hamburger-btn') return;
+    btn.addEventListener('click', () => copyRoomCode());
+  });
+
+  // ── Search bar ────────────────────────────────────────────────────────────────
+  const searchInput = document.querySelector('#search-bar input');
+  if (searchInput) {
+    searchInput.addEventListener('input',   e => doSearch(e.target.value));
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Escape') toggleSearch(); });
+  }
+  const searchClose = document.querySelector('#search-bar .icon-btn');
+  if (searchClose) searchClose.addEventListener('click', () => toggleSearch());
+
+  // ── Reply bar ─────────────────────────────────────────────────────────────────
+  on('reply-bar-close', 'click', () => clearReply());
+  // reply-bar-close is a button inside reply-bar — also wire by class
+  document.querySelectorAll('.reply-bar-close').forEach(b => {
+    b.addEventListener('click', () => clearReply());
+  });
+
+  // ── Message input ─────────────────────────────────────────────────────────────
+  on('msg-input', 'keydown', e => handleKey(e));
+  on('msg-input', 'input',   e => handleTyping(e.target));
+
+  // ── Attach button ─────────────────────────────────────────────────────────────
+  document.querySelectorAll('.attach-btn').forEach(b => {
+    b.addEventListener('click', () => triggerAttach());
+  });
+
+  // ── File input ────────────────────────────────────────────────────────────────
+  on('file-input', 'change', e => handleFileAttach(e));
+
+  // ── Settings modal ────────────────────────────────────────────────────────────
+  on('settings-modal', 'click', e => closeModal(e));
+  const settingsCloseBtn = document.querySelector('#settings-modal .modal-header .icon-btn');
+  if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => closeSettings());
+
+  on('sound-toggle',    'change', () => toggleSoundAlerts());
+  on('anim-toggle',     'change', () => toggleAnimations());
+  on('approval-toggle', 'change', () => toggleApprovalGate());
+  on('ttl-select',      'change', e => setRoomTtl(+e.target.value));
+
+  const rotateBtn = document.querySelector('.btn-rotate-key');
+  if (rotateBtn) rotateBtn.addEventListener('click', () => { rotateKey(); closeSettings(); });
+
+  const saveBtn = document.querySelector('#settings-modal .btn-join');
+  if (saveBtn) saveBtn.addEventListener('click', () => saveSettings());
+
+  const installBtn = document.querySelector('#install-app-row .btn-rotate-key');
+  if (installBtn) installBtn.addEventListener('click', () => triggerPWAInstall());
+
+  // ── Media viewer ──────────────────────────────────────────────────────────────
+  on('media-viewer', 'click', () => closeMediaViewer());
+  on('mv-close',     'click', e => { e.stopPropagation(); closeMediaViewer(); });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+  _wireAllHandlers();
   _wireEntropyListeners();
   // ── Rotating placeholder text (CSP-safe, moved from inline HTML script) ──
   (function initRotatingPlaceholders() {
@@ -3669,6 +3783,7 @@ window.addEventListener('appinstalled', () => {
 // ── Public API — only these names escape the IIFE onto window ─────────────────
 Object.assign(_W, {
   switchJoinTab, handleCreate, handleEnter, toggleVis, updateEntropyMeter, _wireEntropyListeners,
+  _wireAllHandlers,
   cancelJoinRequest, checkInviteCode, joinFromInvite, cancelInvite,
   handleLogout, openSettings, closeSettings, closeModal, saveSettings,
   toggleSoundAlerts, toggleAnimations, toggleApprovalGate, rotateKey,
