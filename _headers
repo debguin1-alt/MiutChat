@@ -1,0 +1,43 @@
+/*
+  # ── Transport security ─────────────────────────────────────────────────────
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+  # ── Clickjacking / framing ──────────────────────────────────────────────────
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+  # ── Cross-origin isolation — enables SharedArrayBuffer, precise timers ──────
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+  Cross-Origin-Resource-Policy: same-origin
+
+  # ── Permissions — deny every powerful browser feature ────────────────────────
+  Permissions-Policy: accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), clipboard-read=(), clipboard-write=(self), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(self), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), speaker-selection=(), sync-xhr=(), usb=(), web-share=(self), xr-spatial-tracking=()
+
+  # ── Content Security Policy — tightest possible for this app ─────────────────
+  # Removes unsafe-inline from style-src by using a nonce (injected by CF Function)
+  # connect-src includes identitytoolkit + securetoken for Firebase Auth
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://www.gstatic.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; report-uri /api/csp-report; report-to csp-endpoint
+
+  # ── Report-To header for CSP reporting API ────────────────────────────────────
+  Report-To: {"group":"csp-endpoint","max_age":86400,"endpoints":[{"url":"/api/csp-report"}]}
+
+  # ── Cache: HTML never cached, assets cached 1 year ───────────────────────────
+  Cache-Control: no-store, no-cache, must-revalidate
+
+/*.min.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.min.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/icons/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/manifest.json
+  Cache-Control: public, max-age=86400
+
+/sw.min.js
+  Cache-Control: no-store
+  Service-Worker-Allowed: /
