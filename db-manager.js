@@ -33,7 +33,7 @@
  * Leave RECAPTCHA_SITE_KEY as an empty string only if you have
  * completely disabled App Check in the Firebase Console.
  * ─────────────────────────────────────────────────────────── */
-const RECAPTCHA_SITE_KEY = '6LcExampleKeyReplaceWithYours'; // ← replace this
+const RECAPTCHA_SITE_KEY = '6LcduZosAAAAAHhBdWag1xYW3myZ_XOA4an3IpmV'; // ← replace this
 
 /* ── Initialise Firebase App Check (runs once, before any db use) */
 (function _initAppCheck() {
