@@ -18,12 +18,28 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-const CORS = {
-  'Access-Control-Allow-Origin':  'https://miutchat.pages.dev',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Vary': 'Origin',
-};
+const ALLOWED_ORIGINS_DEFAULT = ['https://miutchat.pages.dev'];
+
+function getCorsHeaders(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const allowed = env.MIUT_ALLOWED_ORIGINS
+    ? env.MIUT_ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : ALLOWED_ORIGINS_DEFAULT;
+  const allowedOrigin = allowed.includes(origin) ? origin : allowed[0];
+  return {
+    'Access-Control-Allow-Origin':  allowedOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin',
+  };
+}
+
+function isOriginAllowed(origin, env) {
+  const allowed = env.MIUT_ALLOWED_ORIGINS
+    ? env.MIUT_ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : ALLOWED_ORIGINS_DEFAULT;
+  return allowed.some(o => origin.includes(o.replace('https://', '').replace('http://', '')));
+}
 
 const LIMITS = {
   create: { max: 5,  windowSec: 30  },
@@ -95,16 +111,18 @@ async function checkLimit(ip, action, limit, MIUT_RL, MIUT_BAN) {
   return { allowed: true };
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const CORS = getCorsHeaders(context.request, context.env || {});
   return new Response(null, { status: 204, headers: CORS });
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const CORS = getCorsHeaders(request, env);
 
   // Validate CORS origin
   const origin = request.headers.get('Origin') || '';
-  if (!origin.includes('miutchat.pages.dev') && env.MIUT_ENV === 'production') {
+  if (!isOriginAllowed(origin, env) && env.MIUT_ENV === 'production') {
     return new Response(JSON.stringify({ allowed: false, reason: 'forbidden_origin' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json', ...CORS },

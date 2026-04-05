@@ -10,11 +10,21 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-const CORS = {
-  'Access-Control-Allow-Origin':  'https://miutchat.pages.dev',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+const ALLOWED_ORIGINS_DEFAULT = ['https://miutchat.pages.dev'];
+
+function getCorsHeaders(request, env = {}) {
+  const origin = request.headers.get('Origin') || '';
+  const allowed = env.MIUT_ALLOWED_ORIGINS
+    ? env.MIUT_ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : ALLOWED_ORIGINS_DEFAULT;
+  const allowedOrigin = allowed.includes(origin) ? origin : allowed[0];
+  return {
+    'Access-Control-Allow-Origin':  allowedOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin',
+  };
+}
 
 const CODE_RE = /^[a-zA-Z0-9 _\-@#!?+*=.]{6,64}$/;
 
@@ -26,51 +36,53 @@ const WEAK_PATTERNS = [
   /^000000/,
 ];
 
-function json(body, status = 200, extra = {}) {
+function json(body, status = 200, CORS = {}, extra = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS, ...extra },
   });
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const CORS = getCorsHeaders(context.request, context.env || {});
   return new Response(null, { status: 204, headers: CORS });
 }
 
 export async function onRequestPost(context) {
-  const { request } = context;
+  const { request, env } = context;
+  const CORS = getCorsHeaders(request, env || {});
 
   let body;
   try { body = await request.json(); }
-  catch { return json({ valid: false, error: 'bad_request' }, 400); }
+  catch { return json({ valid: false, error: 'bad_request' }, 400, CORS); }
 
   const code   = (body?.code || '').trim();
   const action = body?.action;
 
-  if (!code) return json({ valid: false, error: 'missing_code' }, 400);
+  if (!code) return json({ valid: false, error: 'missing_code' }, 400, CORS);
 
   // Zero-width / invisible chars
   if (/[\u200B-\u200D\uFEFF\u00AD]/.test(code))
-    return json({ valid: false, error: 'invalid_chars' });
+    return json({ valid: false, error: 'invalid_chars' }, 200, CORS);
 
   // Regex allowlist
   if (!CODE_RE.test(code))
-    return json({ valid: false, error: 'invalid_format' });
+    return json({ valid: false, error: 'invalid_format' }, 200, CORS);
 
   // Reserved paths
   if (code === '.' || code === '..')
-    return json({ valid: false, error: 'reserved_code' });
+    return json({ valid: false, error: 'reserved_code' }, 200, CORS);
 
   // Weak pattern check (create only)
   if (action === 'create') {
     for (const pat of WEAK_PATTERNS) {
-      if (pat.test(code)) return json({ valid: false, error: 'weak_code' });
+      if (pat.test(code)) return json({ valid: false, error: 'weak_code' }, 200, CORS);
     }
     // Entropy check: require at least 2 character classes
     const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(r => r.test(code));
     if (classes.length < 2)
-      return json({ valid: false, error: 'low_entropy' });
+      return json({ valid: false, error: 'low_entropy' }, 200, CORS);
   }
 
-  return json({ valid: true });
+  return json({ valid: true }, 200, CORS);
 }
