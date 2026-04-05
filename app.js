@@ -1,3 +1,115 @@
+// ── Wire all static HTML event handlers (CSP-safe: no inline onclick/oninput) ─
+// Called from DOMContentLoaded. All functions are already on window via Object.assign.
+function _wireAllHandlers() {
+  // ── Helper: safe getElementById ──────────────────────────────────────────────
+  function el(id) { return document.getElementById(id); }
+  function on(id, evt, fn, opts) {
+    const e = el(id); if (e) e.addEventListener(evt, fn, opts);
+  }
+  function onQ(sel, evt, fn) {
+    document.querySelectorAll(sel).forEach(e => e.addEventListener(evt, fn));
+  }
+
+  // ── Join screen tabs ──────────────────────────────────────────────────────────
+  onQ('[data-tab="create"]', 'click', () => switchJoinTab('create'));
+  onQ('[data-tab="enter"]',  'click', () => switchJoinTab('enter'));
+
+  // ── Create room ───────────────────────────────────────────────────────────────
+  on('input-create-code', 'input',  e => updateEntropyMeter(e.target.value));
+  on('input-create-code', 'keyup',  e => updateEntropyMeter(e.target.value));
+  on('input-create-code', 'change', e => updateEntropyMeter(e.target.value));
+  on('input-create-code', 'compositionend', e => updateEntropyMeter(e.target.value));
+  on('create-eye-btn', 'click', () => toggleVis('input-create-code', 'create-eye-btn'));
+  on('btn-create',     'click', () => handleCreate());
+
+  // ── Enter room ────────────────────────────────────────────────────────────────
+  on('enter-eye-btn', 'click', () => toggleVis('input-room-code', 'enter-eye-btn'));
+  on('btn-enter',     'click', () => handleEnter());
+
+  // ── Enter room: Enter key ─────────────────────────────────────────────────────
+  on('input-room-code', 'keydown', e => { if (e.key === 'Enter') handleEnter(); });
+
+  // ── Waiting screen ────────────────────────────────────────────────────────────
+  on('btn-waiting-cancel', 'click', () => cancelJoinRequest());
+
+  // ── Invite screen ─────────────────────────────────────────────────────────────
+  on('invite-code-input', 'input',   e => checkInviteCode(e.target));
+  on('invite-code-input', 'keydown', e => { if (e.key === 'Enter') joinFromInvite(); });
+  on('invite-vis-btn',    'click',   () => toggleVis('invite-code-input', 'invite-vis-btn'));
+  on('invite-join-btn',   'click',   () => joinFromInvite());
+
+  // ── Invite back / cancel ──────────────────────────────────────────────────────
+  const backBtns = document.querySelectorAll('.btn-invite-back');
+  backBtns.forEach(b => b.addEventListener('click', () => cancelInvite()));
+
+  // ── Sidebar ───────────────────────────────────────────────────────────────────
+  on('room-code-pill',   'click', () => copyRoomCode());
+  on('share-room-btn',   'click', () => shareRoomLink());
+  on('settings-btn',     'click', () => openSettings());
+  on('btn-logout',       'click', () => handleLogout());
+  on('hamburger-btn',    'click', () => toggleSidebar());
+  on('sidebar-overlay',  'click', () => closeSidebar());
+
+  // ── Chat header ───────────────────────────────────────────────────────────────
+  on('search-btn', 'click', () => toggleSearch());
+  // Copy room code button in header (second copy button, no id)
+  document.querySelectorAll('.chat-header .icon-btn').forEach(btn => {
+    if (btn.id === 'search-btn' || btn.id === 'hamburger-btn') return;
+    btn.addEventListener('click', () => copyRoomCode());
+  });
+
+  // ── Search bar ────────────────────────────────────────────────────────────────
+  const searchInput = document.querySelector('#search-bar input');
+  if (searchInput) {
+    searchInput.addEventListener('input',   e => doSearch(e.target.value));
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Escape') toggleSearch(); });
+  }
+  const searchClose = document.querySelector('#search-bar .icon-btn');
+  if (searchClose) searchClose.addEventListener('click', () => toggleSearch());
+
+  // ── Reply bar ─────────────────────────────────────────────────────────────────
+  on('reply-bar-close', 'click', () => clearReply());
+  // reply-bar-close is a button inside reply-bar — also wire by class
+  document.querySelectorAll('.reply-bar-close').forEach(b => {
+    b.addEventListener('click', () => clearReply());
+  });
+
+  // ── Message input ─────────────────────────────────────────────────────────────
+  on('msg-input', 'keydown', e => handleKey(e));
+  on('msg-input', 'input',   e => handleTyping(e.target));
+
+  // ── Attach button ─────────────────────────────────────────────────────────────
+  document.querySelectorAll('.attach-btn').forEach(b => {
+    b.addEventListener('click', () => triggerAttach());
+  });
+
+  // ── File input ────────────────────────────────────────────────────────────────
+  on('file-input', 'change', e => handleFileAttach(e));
+
+  // ── Settings modal ────────────────────────────────────────────────────────────
+  on('settings-modal', 'click', e => closeModal(e));
+  const settingsCloseBtn = document.querySelector('#settings-modal .modal-header .icon-btn');
+  if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => closeSettings());
+
+  on('sound-toggle',    'change', () => toggleSoundAlerts());
+  on('anim-toggle',     'change', () => toggleAnimations());
+  on('approval-toggle', 'change', () => toggleApprovalGate());
+  on('ttl-select',      'change', e => setRoomTtl(+e.target.value));
+
+  const rotateBtn = document.querySelector('.btn-rotate-key');
+  if (rotateBtn) rotateBtn.addEventListener('click', () => { rotateKey(); closeSettings(); });
+
+  const saveBtn = document.querySelector('#settings-modal .btn-join');
+  if (saveBtn) saveBtn.addEventListener('click', () => saveSettings());
+
+  const installBtn = document.querySelector('#install-app-row .btn-rotate-key');
+  if (installBtn) installBtn.addEventListener('click', () => triggerPWAInstall());
+
+  // ── Media viewer ──────────────────────────────────────────────────────────────
+  on('media-viewer', 'click', () => closeMediaViewer());
+  on('mv-close',     'click', e => { e.stopPropagation(); closeMediaViewer(); });
+}
+
 'use strict';
 // @ts-check
 (function (_W) {
@@ -714,6 +826,7 @@ function _wireEntropyListeners() {
 // Map Firebase error codes → { title, detail, icon, type }
 // type: 'network' | 'auth' | 'quota' | 'permission' | 'notfound' | 'unknown'
 const _ERROR_MAP = {
+  // ── Firestore errors ──────────────────────────────────────────────────────
   'unavailable':              { title: 'Server unreachable',     detail: 'Check your connection and try again.',           icon: '📡', type: 'network'     },
   'network-request-failed':   { title: 'No internet connection', detail: 'You appear to be offline.',                     icon: '📶', type: 'network'     },
   'deadline-exceeded':        { title: 'Request timed out',      detail: 'Server took too long — try again.',             icon: '⏱',  type: 'network'     },
@@ -725,9 +838,20 @@ const _ERROR_MAP = {
   'cancelled':                { title: 'Operation cancelled',    detail: 'The request was cancelled — try again.',        icon: '✗',  type: 'unknown'     },
   'internal':                 { title: 'Server error',           detail: 'An internal error occurred. Try again.',        icon: '⚡', type: 'unknown'     },
   'DB probe timeout':         { title: 'Connection timeout',     detail: 'Database took too long to respond.',            icon: '⏱',  type: 'network'     },
-  'auth/operation-not-allowed': { title: 'Anonymous sign-in disabled', detail: 'Enable Anonymous Auth in Firebase Console → Authentication → Sign-in method.', icon: '🔧', type: 'auth' },
-  'auth/network-request-failed': { title: 'No internet',        detail: 'Cannot reach authentication servers.',          icon: '📶', type: 'network'     },
-  'auth/too-many-requests':   { title: 'Too many attempts',      detail: 'Wait a moment before trying again.',            icon: '⛔', type: 'quota'       },
+  // ── Firebase Auth errors ──────────────────────────────────────────────────
+  'auth/operation-not-allowed':    { title: 'Anonymous auth disabled',  detail: 'Enable Anonymous Auth in Firebase Console → Authentication → Sign-in method.', icon: '🔧', type: 'auth' },
+  'auth/network-request-failed':   { title: 'No internet',              detail: 'Cannot reach authentication servers.',          icon: '📶', type: 'network' },
+  'auth/too-many-requests':        { title: 'Too many attempts',        detail: 'Wait a moment before trying again.',            icon: '⛔', type: 'quota'   },
+  'auth/invalid-api-key':          { title: 'Firebase config error',    detail: 'Firebase API key is missing or invalid. Check db-manager.js config.', icon: '🔑', type: 'auth' },
+  'auth/app-not-authorized':       { title: 'Domain not authorized',    detail: 'Add this domain to Firebase Console → Authentication → Settings → Authorized domains.', icon: '🌐', type: 'auth' },
+  'auth/unauthorized-domain':      { title: 'Domain not authorized',    detail: 'Add this domain to Firebase Console → Authentication → Settings → Authorized domains.', icon: '🌐', type: 'auth' },
+  'auth/invalid-app-id':           { title: 'Firebase config error',    detail: 'Invalid Firebase App ID in db-manager.js.',     icon: '🔑', type: 'auth' },
+  'auth/app-deleted':              { title: 'Firebase project deleted',  detail: 'The Firebase project no longer exists.',        icon: '🗑', type: 'auth' },
+  'auth/cors-unsupported':         { title: 'Browser not supported',    detail: 'Try a different browser.',                      icon: '🌐', type: 'auth' },
+  'auth/web-storage-unsupported':  { title: 'Storage disabled',         detail: 'Enable cookies and local storage in your browser settings.', icon: '🍪', type: 'auth' },
+  'auth/auth-domain-config-required': { title: 'Firebase config error', detail: 'authDomain is missing from Firebase config.',   icon: '🔑', type: 'auth' },
+  'no-app':                        { title: 'Firebase not initialised',  detail: 'Firebase app failed to start. Reload the page.', icon: '🔥', type: 'auth' },
+  'load failed':                   { title: 'No internet connection',   detail: 'Check your connection and try again.',           icon: '📶', type: 'network' },
 };
 
 /**
@@ -757,7 +881,9 @@ function _classifyError(e) {
   if (raw.includes('permission') || raw.includes('forbidden') || raw.includes('unauthorized'))
     return { title: 'Access denied', detail: "You don't have permission.", icon: '🔒', type: 'permission' };
 
-  return { title: 'Connection error', detail: 'Check your connection and try again.', icon: '📡', type: 'unknown' };
+  // Show the raw error code so users can report exactly what went wrong
+  const hint = e?.code ? ' [' + e.code + ']' : (e?.message ? ' [' + String(e.message).slice(0, 60) + ']' : '');
+  return { title: 'Connection error', detail: 'Check your connection and try again.' + hint, icon: '📡', type: 'unknown' };
 }
 
 // ─── Persistent Rate Limiter ─────────────────────────────────────────────────
@@ -1011,119 +1137,6 @@ function saveSession() { localStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify
 function loadSession() { try { return JSON.parse(localStorage.getItem(CONFIG.SESSION_KEY)); } catch { return null; } }
 function saveRoom(c)   { localStorage.setItem(CONFIG.ROOM_KEY, c); }
 function loadRoom()    { return localStorage.getItem(CONFIG.ROOM_KEY); }
-
-
-// ── Wire all static HTML event handlers (CSP-safe: no inline onclick/oninput) ─
-// Called from DOMContentLoaded. All functions are already on window via Object.assign.
-function _wireAllHandlers() {
-  // ── Helper: safe getElementById ──────────────────────────────────────────────
-  function el(id) { return document.getElementById(id); }
-  function on(id, evt, fn, opts) {
-    const e = el(id); if (e) e.addEventListener(evt, fn, opts);
-  }
-  function onQ(sel, evt, fn) {
-    document.querySelectorAll(sel).forEach(e => e.addEventListener(evt, fn));
-  }
-
-  // ── Join screen tabs ──────────────────────────────────────────────────────────
-  onQ('[data-tab="create"]', 'click', () => switchJoinTab('create'));
-  onQ('[data-tab="enter"]',  'click', () => switchJoinTab('enter'));
-
-  // ── Create room ───────────────────────────────────────────────────────────────
-  on('input-create-code', 'input',  e => updateEntropyMeter(e.target.value));
-  on('input-create-code', 'keyup',  e => updateEntropyMeter(e.target.value));
-  on('input-create-code', 'change', e => updateEntropyMeter(e.target.value));
-  on('input-create-code', 'compositionend', e => updateEntropyMeter(e.target.value));
-  on('create-eye-btn', 'click', () => toggleVis('input-create-code', 'create-eye-btn'));
-  on('btn-create',     'click', () => handleCreate());
-
-  // ── Enter room ────────────────────────────────────────────────────────────────
-  on('enter-eye-btn', 'click', () => toggleVis('input-room-code', 'enter-eye-btn'));
-  on('btn-enter',     'click', () => handleEnter());
-
-  // ── Enter room: Enter key ─────────────────────────────────────────────────────
-  on('input-room-code', 'keydown', e => { if (e.key === 'Enter') handleEnter(); });
-
-  // ── Waiting screen ────────────────────────────────────────────────────────────
-  on('btn-waiting-cancel', 'click', () => cancelJoinRequest());
-
-  // ── Invite screen ─────────────────────────────────────────────────────────────
-  on('invite-code-input', 'input',   e => checkInviteCode(e.target));
-  on('invite-code-input', 'keydown', e => { if (e.key === 'Enter') joinFromInvite(); });
-  on('invite-vis-btn',    'click',   () => toggleVis('invite-code-input', 'invite-vis-btn'));
-  on('invite-join-btn',   'click',   () => joinFromInvite());
-
-  // ── Invite back / cancel ──────────────────────────────────────────────────────
-  const backBtns = document.querySelectorAll('.btn-invite-back');
-  backBtns.forEach(b => b.addEventListener('click', () => cancelInvite()));
-
-  // ── Sidebar ───────────────────────────────────────────────────────────────────
-  on('room-code-pill',   'click', () => copyRoomCode());
-  on('share-room-btn',   'click', () => shareRoomLink());
-  on('settings-btn',     'click', () => openSettings());
-  on('btn-logout',       'click', () => handleLogout());
-  on('hamburger-btn',    'click', () => toggleSidebar());
-  on('sidebar-overlay',  'click', () => closeSidebar());
-
-  // ── Chat header ───────────────────────────────────────────────────────────────
-  on('search-btn', 'click', () => toggleSearch());
-  // Copy room code button in header (second copy button, no id)
-  document.querySelectorAll('.chat-header .icon-btn').forEach(btn => {
-    if (btn.id === 'search-btn' || btn.id === 'hamburger-btn') return;
-    btn.addEventListener('click', () => copyRoomCode());
-  });
-
-  // ── Search bar ────────────────────────────────────────────────────────────────
-  const searchInput = document.querySelector('#search-bar input');
-  if (searchInput) {
-    searchInput.addEventListener('input',   e => doSearch(e.target.value));
-    searchInput.addEventListener('keydown', e => { if (e.key === 'Escape') toggleSearch(); });
-  }
-  const searchClose = document.querySelector('#search-bar .icon-btn');
-  if (searchClose) searchClose.addEventListener('click', () => toggleSearch());
-
-  // ── Reply bar ─────────────────────────────────────────────────────────────────
-  on('reply-bar-close', 'click', () => clearReply());
-  // reply-bar-close is a button inside reply-bar — also wire by class
-  document.querySelectorAll('.reply-bar-close').forEach(b => {
-    b.addEventListener('click', () => clearReply());
-  });
-
-  // ── Message input ─────────────────────────────────────────────────────────────
-  on('msg-input', 'keydown', e => handleKey(e));
-  on('msg-input', 'input',   e => handleTyping(e.target));
-
-  // ── Attach button ─────────────────────────────────────────────────────────────
-  document.querySelectorAll('.attach-btn').forEach(b => {
-    b.addEventListener('click', () => triggerAttach());
-  });
-
-  // ── File input ────────────────────────────────────────────────────────────────
-  on('file-input', 'change', e => handleFileAttach(e));
-
-  // ── Settings modal ────────────────────────────────────────────────────────────
-  on('settings-modal', 'click', e => closeModal(e));
-  const settingsCloseBtn = document.querySelector('#settings-modal .modal-header .icon-btn');
-  if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => closeSettings());
-
-  on('sound-toggle',    'change', () => toggleSoundAlerts());
-  on('anim-toggle',     'change', () => toggleAnimations());
-  on('approval-toggle', 'change', () => toggleApprovalGate());
-  on('ttl-select',      'change', e => setRoomTtl(+e.target.value));
-
-  const rotateBtn = document.querySelector('.btn-rotate-key');
-  if (rotateBtn) rotateBtn.addEventListener('click', () => { rotateKey(); closeSettings(); });
-
-  const saveBtn = document.querySelector('#settings-modal .btn-join');
-  if (saveBtn) saveBtn.addEventListener('click', () => saveSettings());
-
-  const installBtn = document.querySelector('#install-app-row .btn-rotate-key');
-  if (installBtn) installBtn.addEventListener('click', () => triggerPWAInstall());
-
-  // ── Media viewer ──────────────────────────────────────────────────────────────
-  on('media-viewer', 'click', () => closeMediaViewer());
-  on('mv-close',     'click', e => { e.stopPropagation(); closeMediaViewer(); });
-}
 
 window.addEventListener('DOMContentLoaded', () => {
   _wireAllHandlers();

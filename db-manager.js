@@ -32,18 +32,18 @@ const _DB_CONFIGS = [
   {
     name:   'miut-db0',
     active: true,
-    config: (() => {
-      const nx = (typeof window !== 'undefined' && window.__NX_CONFIG__) || {};
-      if (!nx.apiKey) {
-      }
-      return {
-        apiKey:            nx.apiKey            || '',
-        authDomain:        nx.authDomain        || '',
-        projectId:         nx.projectId         || '',
-        messagingSenderId: nx.messagingSenderId || '',
-        appId:             nx.appId             || '',
-      };
-    })(),
+    /*
+     * Firebase web API keys are public identifiers — not secrets.
+     * Real access control lives in Firestore Security Rules (firestore.rules).
+     * See: https://firebase.google.com/docs/projects/api-keys
+     */
+    config: {
+      apiKey:            'AIzaSyCoPJjVzwaaZBgvz-P4vGJ44muNS51qqeg',
+      authDomain:        'tuition-fee-management-4e15e.firebaseapp.com',
+      projectId:         'tuition-fee-management-4e15e',
+      messagingSenderId: '1093461316314',
+      appId:             '1:1093461316314:web:c06be1b4165f0cfadc0be3',
+    },
   },
 
   /* ── Database 1 — Add when ready ─────────────────────────── */
