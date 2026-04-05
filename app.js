@@ -47,7 +47,6 @@ function _wireAllHandlers() {
   on('share-room-btn',   'click', () => shareRoomLink());
   on('settings-btn',     'click', () => openSettings());
   on('btn-logout',       'click', () => handleLogout());
-  on('hamburger-btn',    'click', () => toggleSidebar());
   on('sidebar-overlay',  'click', () => closeSidebar());
 
   // ── Chat header ───────────────────────────────────────────────────────────────

@@ -45,3 +45,10 @@
 /config.js
   Cache-Control: private, no-store
   X-Robots-Tag: noindex
+
+/sitemap.xml
+  Cache-Control: public, max-age=86400
+  Content-Type: application/xml; charset=utf-8
+
+/robots.txt
+  Cache-Control: public, max-age=86400
