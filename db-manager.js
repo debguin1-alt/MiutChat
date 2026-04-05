@@ -51,6 +51,8 @@ const RECAPTCHA_SITE_KEY = '6LcduZosAAAAAHhBdWag1xYW3myZ_XOA4an3IpmV'; // ← re
 
 
 
+const _DB_CONFIGS = [
+
   /* ── Database 0 — Primary (active) ────────────────────────── */
   /*
    * Config is injected at runtime via config.js → window.__NX_CONFIG__.

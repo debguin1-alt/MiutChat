@@ -95,7 +95,7 @@ function _wireAllHandlers() {
   on('approval-toggle', 'change', () => toggleApprovalGate());
   on('ttl-select',      'change', e => setRoomTtl(+e.target.value));
 
-  const rotateBtn = document.querySelector('.btn-rotate-key');
+  const rotateBtn = document.querySelector('#rotate-key-row .btn-rotate-key');
   if (rotateBtn) rotateBtn.addEventListener('click', () => { rotateKey(); closeSettings(); });
 
   const saveBtn = document.querySelector('#settings-modal .btn-join');
@@ -1094,7 +1094,7 @@ function _startCountdown(ms, context) {
         '<circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.6"/>' +
         '<path d="M10 6v4l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
       '</svg>' +
-      '<span style="color:' + colour + ';font-family:var(--font-mono);font-size:.72rem;letter-spacing:.5px">' +
+      '<span style="color:' + colour + ';font-family:var(--fmono);font-size:.72rem;letter-spacing:.5px">' +
         'Too many attempts — wait <strong>' + timeStr + '</strong>' +
       '</span>' +
       '<div class="nx-countdown-progress" style="--p:' + pct + '%;--c:' + colour + '"></div>';
@@ -1171,7 +1171,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!b) {
       b = document.createElement('div');
       b.id = 'offline-banner';
-      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--danger,#e74c3c);color:#fff;text-align:center;padding:6px 12px;font-size:.72rem;font-family:var(--font-mono,monospace);letter-spacing:.5px';
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--danger,#e74c3c);color:#fff;text-align:center;padding:6px 12px;font-size:.72rem;font-family:var(--fmono,monospace);letter-spacing:.5px';
       b.textContent = '⚠ No internet connection — messages will not send';
       document.body.prepend(b);
     }
@@ -1553,7 +1553,7 @@ async function checkApprovalAndBoot() {
       showWaitingScreen();
     }
   } catch(e) {
-
+    console.warn('[MIUT] checkApprovalAndBoot error — falling back to boot:', e?.message || e);
     // Mark online best-effort; if offline this fails silently
     if (state.roomCode && state.me?.id) {
       db.collection('rooms').doc(state.roomCode)
@@ -3610,11 +3610,11 @@ function showConfirm(title, msg, confirmLabel = 'CONFIRM') {
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px';
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--surface2);border:1px solid var(--teal-border);border-radius:14px;padding:28px 24px;max-width:320px;width:100%;display:flex;flex-direction:column;gap:18px;box-shadow:0 16px 48px rgba(0,0,0,0.6)';
-    const h = document.createElement('div'); h.style.cssText = 'font-family:var(--font-ui);font-size:.9rem;font-weight:700;color:#fff;letter-spacing:1px'; h.textContent = title;
-    const m = document.createElement('div'); m.style.cssText = 'font-size:.75rem;color:var(--text2);line-height:1.7;font-family:var(--font-mono)'; m.textContent = msg;
+    const h = document.createElement('div'); h.style.cssText = 'font-family:var(--fui);font-size:.9rem;font-weight:700;color:#fff;letter-spacing:1px'; h.textContent = title;
+    const m = document.createElement('div'); m.style.cssText = 'font-size:.75rem;color:var(--text2);line-height:1.7;font-family:var(--fmono)'; m.textContent = msg;
     const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;justify-content:flex-end';
-    const no  = document.createElement('button'); no.textContent = 'CANCEL'; no.style.cssText = 'padding:10px 20px;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);font-family:var(--font-ui);font-size:.68rem;font-weight:700;letter-spacing:2px;cursor:pointer';
-    const yes = document.createElement('button'); yes.textContent = confirmLabel;  yes.style.cssText = 'padding:10px 20px;border-radius:8px;background:var(--danger);border:1px solid var(--danger);color:#fff;font-family:var(--font-ui);font-size:.68rem;font-weight:700;letter-spacing:2px;cursor:pointer';
+    const no  = document.createElement('button'); no.textContent = 'CANCEL'; no.style.cssText = 'padding:10px 20px;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);font-family:var(--fui);font-size:.68rem;font-weight:700;letter-spacing:2px;cursor:pointer';
+    const yes = document.createElement('button'); yes.textContent = confirmLabel;  yes.style.cssText = 'padding:10px 20px;border-radius:8px;background:var(--danger);border:1px solid var(--danger);color:#fff;font-family:var(--fui);font-size:.68rem;font-weight:700;letter-spacing:2px;cursor:pointer';
     const done = v => { ov.remove(); resolve(v); };
     no.addEventListener('click', () => done(false));
     yes.addEventListener('click', () => done(true));
