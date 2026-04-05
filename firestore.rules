@@ -124,6 +124,7 @@ service cloud.firestore {
                       && request.resource.data.keys().hasAll(['name', 'role', 'approved', 'online', 'joinedAt']);
 
         // UPDATE: own doc (online/name/pubKey) OR admin escalating role/approved
+        //         OR room creator self-escalating to admin on first join
         allow update: if isAuthed() && (
           // Own doc — can update presence fields and own info
           (isOwn(uid) && request.resource.data.diff(resource.data).affectedKeys()
@@ -132,6 +133,15 @@ service cloud.firestore {
           // Admin can approve/decline/promote
           (isAdmin(roomCode) && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['approved', 'role', 'online', 'declined']))
+          ||
+          // Room creator can self-escalate to admin immediately after their own .set()
+          // Allowed only while still unapproved (prevents re-escalation) and only
+          // for the exact user stored as creatorId on the room document.
+          (isOwn(uid)
+           && resource.data.approved == false
+           && get(/databases/$(database)/documents/rooms/$(roomCode)).data.creatorId == request.auth.uid
+           && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['approved', 'role']))
         );
 
         // DELETE: own doc or admin
