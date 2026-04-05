@@ -849,6 +849,9 @@ const _ERROR_MAP = {
   'auth/cors-unsupported':         { title: 'Browser not supported',    detail: 'Try a different browser.',                      icon: '🌐', type: 'auth' },
   'auth/web-storage-unsupported':  { title: 'Storage disabled',         detail: 'Enable cookies and local storage in your browser settings.', icon: '🍪', type: 'auth' },
   'auth/auth-domain-config-required': { title: 'Firebase config error', detail: 'authDomain is missing from Firebase config.',   icon: '🔑', type: 'auth' },
+  'appCheck/token-error':             { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: '🛡', type: 'auth' },
+  'app-check/token-error':            { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: '🛡', type: 'auth' },
+  'app check token':                  { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: '🛡', type: 'auth' },
   'no-app':                        { title: 'Firebase not initialised',  detail: 'Firebase app failed to start. Reload the page.', icon: '🔥', type: 'auth' },
   'load failed':                   { title: 'No internet connection',   detail: 'Check your connection and try again.',           icon: '📶', type: 'network' },
 };

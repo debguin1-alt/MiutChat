@@ -19,7 +19,37 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
-const _DB_CONFIGS = [
+/* ── App Check configuration ──────────────────────────────────
+ * Firebase App Check prevents unauthorized clients from accessing
+ * your Firestore database.
+ *
+ * HOW TO GET YOUR SITE KEY:
+ *   1. Go to https://www.google.com/recaptcha/admin
+ *   2. Register your domain (e.g. miutchat.pages.dev) as reCAPTCHA v3
+ *   3. Copy the "Site key" and paste it below
+ *   4. Back in Firebase Console → App Check → Register your web app
+ *      → choose reCAPTCHA v3 → paste the same site key
+ *
+ * Leave RECAPTCHA_SITE_KEY as an empty string only if you have
+ * completely disabled App Check in the Firebase Console.
+ * ─────────────────────────────────────────────────────────── */
+const RECAPTCHA_SITE_KEY = '6LcExampleKeyReplaceWithYours'; // ← replace this
+
+/* ── Initialise Firebase App Check (runs once, before any db use) */
+(function _initAppCheck() {
+  try {
+    if (typeof firebase === 'undefined' || !RECAPTCHA_SITE_KEY) return;
+    const appCheckInstance = firebase.appCheck();
+    appCheckInstance.activate(
+      new firebase.appCheck.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      /* isTokenAutoRefreshEnabled */ true
+    );
+  } catch (e) {
+    console.warn('[Miut] App Check init skipped:', e.message);
+  }
+})();
+
+
 
   /* ── Database 0 — Primary (active) ────────────────────────── */
   /*
