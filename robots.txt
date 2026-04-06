@@ -1,4 +1,9 @@
 User-agent: *
 Allow: /
+Allow: /landing.html
+Allow: /privacy.html
+Disallow: /functions/
+Disallow: /src/
+Disallow: /dist/
 
 Sitemap: https://miutchat.pages.dev/sitemap.xml
