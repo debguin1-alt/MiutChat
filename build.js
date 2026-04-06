@@ -46,12 +46,20 @@ run(`${ESBUILD} style.css --minify --outfile=dist/style.min.css`);
 
 // ── Copy static assets ─────────────────────────────────────────────────────────
 const STATIC = [
-  'manifest.json', 'offline.html', '.nojekyll', 'firestore.rules', 'security.txt',
-  // Cloudflare Pages routing / security — MUST be in dist/ or they are ignored
-  '_headers', '_redirects',
-  // Config and extracted scripts
-  'config.js', 'placeholder-rotator.js', 'privacy.html'
-, 'landing.html',  'wrangler.toml', 'CNAME',
+  'manifest.json',
+  'offline.html',
+  '.nojekyll', 
+  'security.txt',
+  '_headers',
+  '_redirects',
+  'config.js',
+  'placeholder-rotator.js',
+  'privacy.html',
+  'landing.html',
+  'wrangler.toml',
+  'CNAME',
+  'robots.txt',
+  'sitemap.xml',
 ];
 for (const f of STATIC) {
   if (fs.existsSync(f)) {
