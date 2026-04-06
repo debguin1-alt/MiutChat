@@ -50,8 +50,8 @@ const STATIC = [
   // Cloudflare Pages routing / security — MUST be in dist/ or they are ignored
   '_headers', '_redirects',
   // Config and extracted scripts
-  'config.js', 'placeholder-rotator.js',
-  'wrangler.toml', 'CNAME',
+  'config.js', 'placeholder-rotator.js', 'privacy.html'
+, 'landing.html',  'wrangler.toml', 'CNAME',
 ];
 for (const f of STATIC) {
   if (fs.existsSync(f)) {
