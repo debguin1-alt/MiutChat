@@ -47,7 +47,7 @@ function _wireAllHandlers() {
   on('share-room-btn',   'click', () => shareRoomLink());
   on('settings-btn',     'click', () => openSettings());
   on('btn-logout',       'click', () => handleLogout());
-  on('sidebar-overlay',  'click', () => closeSidebar());
+  // sidebar-overlay click is wired in setupSidebar() — not here
 
   // ── Chat header ───────────────────────────────────────────────────────────────
   on('search-btn', 'click', () => toggleSearch());
@@ -217,37 +217,43 @@ let _authReady = null;
 async function ensureAuth() {
   if (_authReady) return _authReady;
   _authReady = (async () => {
-    // Wait for db-manager.js to confirm Firebase compat SDK is loaded and
-    // all app instances are initialised before touching firebase.* APIs.
-    // _dbFirebaseReady is set by db-manager.js (deferred, runs before app.js).
     if (window._dbFirebaseReady) {
-      await window._dbFirebaseReady;
+      try { await window._dbFirebaseReady; }
+      catch (e) { _authReady = null; throw e; }
     } else {
-      // Fallback: yield to the microtask queue once to let deferred scripts settle.
       await Promise.resolve();
       if (typeof firebase === 'undefined') {
-        throw new Error('Firebase SDK not available — check that gstatic.com is reachable.');
+        throw new Error('Firebase SDK unavailable — check your connection or ad blocker.');
       }
     }
-    return new Promise((resolve, reject) => {
+    // Retry up to 3 times with exponential backoff for network failures
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 900 * Math.pow(2, attempt - 1)));
       try {
-        const authApp  = firebase.app('miut-db0');
-        const authInst = firebase.auth(authApp);
-        const unsub = authInst.onAuthStateChanged(user => {
-          unsub();
-          if (user) { resolve(user.uid); return; }
-          authInst.signInAnonymously()
-            .then(cred => resolve(cred.user.uid))
-            .catch(err => {
-              _authReady = null;
-              reject(err);
-            });
-        }, err => { _authReady = null; reject(err); });
+        const uid = await new Promise((resolve, reject) => {
+          try {
+            const authApp  = firebase.app('miut-db0');
+            const authInst = firebase.auth(authApp);
+            const unsub = authInst.onAuthStateChanged(user => {
+              unsub();
+              if (user) { resolve(user.uid); return; }
+              authInst.signInAnonymously()
+                .then(cred => resolve(cred.user.uid))
+                .catch(reject);
+            }, reject);
+          } catch (err) { reject(err); }
+        });
+        return uid;
       } catch (err) {
-        _authReady = null;
-        reject(err);
+        lastErr = err;
+        const code = err?.code || '';
+        // Only retry transient network errors, not config errors
+        if (code.startsWith('auth/') && !code.includes('network') && !code.includes('too-many-requests')) break;
       }
-    });
+    }
+    _authReady = null;
+    throw lastErr;
   })().catch(err => { _authReady = null; throw err; });
   return _authReady;
 }
@@ -1269,8 +1275,17 @@ function setupSidebar() {
     document.body.appendChild(ov);
   }
   const ov = $('sidebar-overlay');
-  ov.addEventListener('click',      closeSidebar);
-  ov.addEventListener('touchend',   e => { e.preventDefault(); closeSidebar(); }, { passive: false });
+  // Only close when the OVERLAY BACKDROP itself is tapped, not when events bubble from sidebar children
+  ov.addEventListener('click', e => { if (e.target === ov) closeSidebar(); });
+  ov.addEventListener('touchend', e => { if (e.target === ov) { e.preventDefault(); closeSidebar(); } }, { passive: false });
+
+  // Prevent any touch/click inside the sidebar from ever bubbling to the overlay
+  const sidebarEl = $('sidebar');
+  if (sidebarEl) {
+    sidebarEl.addEventListener('click',    e => e.stopPropagation());
+    sidebarEl.addEventListener('touchend', e => e.stopPropagation());
+    sidebarEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  }
 
   // Wire hamburger — attach to existing HTML element OR inject a new one
   const header = $('chat-header');
@@ -1289,19 +1304,22 @@ function setupSidebar() {
     header.insertBefore(ham, header.firstChild);
   }
 
-  // Swipe gestures
+  // Swipe gestures — only trigger on intentional horizontal swipes.
+  // Any touch that STARTS inside .sidebar is excluded so tapping sidebar
+  // items never accidentally triggers the global close-on-swipe handler.
   let _tx = 0, _ty = 0, _skipSwipe = false;
   document.addEventListener('touchstart', e => {
     _tx = e.touches[0].clientX;
     _ty = e.touches[0].clientY;
-    _skipSwipe = !!e.target.closest('button,input,textarea,a,label,.member-item');
+    _skipSwipe = !!e.target.closest('.sidebar,button,input,textarea,a,label,.member-item');
   }, { passive: true });
   document.addEventListener('touchend', e => {
     if (_skipSwipe) return;
     const dx = e.changedTouches[0].clientX - _tx;
     const dy = e.changedTouches[0].clientY - _ty;
-    if (Math.abs(dy) > Math.abs(dx) * 1.3 || Math.abs(dx) < 44) return;
-    if (dx > 0 && _tx < 24 && !_sidebarOpen)  openSidebar();
+    // Require deliberate swipe: 60px+ horizontal, clearly not vertical
+    if (Math.abs(dy) > Math.abs(dx) * 1.1 || Math.abs(dx) < 60) return;
+    if (dx > 0 && _tx < 36 && !_sidebarOpen)  openSidebar();
     if (dx < 0 && _sidebarOpen)               closeSidebar();
   }, { passive: true });
 }
@@ -3637,6 +3655,20 @@ function showError(msg, type) {
 function showSmartError(e, context) {
   const { title, detail, icon, type } = _classifyError(e);
   showError(icon + ' ' + title + ' — ' + detail, type);
+  // For network errors, inject a Retry button below the error message
+  if (type === 'network' || type === 'auth') {
+    const errEl = $('join-error');
+    if (errEl) {
+      const retryFn = context === 'create' ? handleCreate : handleEnter;
+      const existing = errEl.parentNode.querySelector('.error-retry-btn');
+      if (existing) existing.remove();
+      const btn = document.createElement('button');
+      btn.className = 'error-retry-btn';
+      btn.innerHTML = '<svg viewBox="0 0 20 20" fill="none" width="12" height="12"><path d="M4 4v4h4M16 16v-4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.3 12A7 7 0 0015.7 8M15.7 8A7 7 0 004.3 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> RETRY';
+      btn.addEventListener('click', () => { btn.remove(); _authReady = null; retryFn(); });
+      errEl.insertAdjacentElement('afterend', btn);
+    }
+  }
 }
 function setLoading(btn, on, label) {
   if (!btn) return;
