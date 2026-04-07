@@ -1,9 +1,26 @@
 User-agent: *
+Disallow: /private/
+Disallow: /tmp/
 Allow: /
-Allow: /landing.html
-Allow: /privacy.html
-Disallow: /functions/
-Disallow: /src/
-Disallow: /dist/
 
+# Sitemap location
 Sitemap: https://miutchat.pages.dev/sitemap.xml
+
+# Crawl-delay (optional, polite for heavy bots)
+Crawl-delay: 10
+
+# Specific rules for Googlebot
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 5
+
+# Specific rules for Bingbot
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 5
+
+# Block bad bots
+User-agent: AhrefsBot
+Disallow: /
+User-agent: MJ12bot
+Disallow: /
