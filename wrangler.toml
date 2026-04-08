@@ -23,4 +23,4 @@ RL_SEND_WIN_S = "10"
 
 [[kv_namespaces]]
 binding = "MIUT_KV"
-id      = "REPLACE_WITH_YOUR_MIUT_KV_NAMESPACE_ID"
+id      = "f5973db3a599408ca5dbce63ed19487e"
