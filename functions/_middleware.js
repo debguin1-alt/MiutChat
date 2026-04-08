@@ -33,18 +33,24 @@ export async function onRequest(ctx) {
     try {
       const mode = await env.MIUT_KV.get('maintenance_mode');
       if (mode === 'true') {
-        // Serve maintenance page with 503 status
-        const maintUrl = new URL('/maintenance.html', request.url).toString();
-        const maintResp = await fetch(maintUrl);
-        const body = await maintResp.text();
-        return new Response(body, {
-          status: 503,
-          headers: {
-            'Content-Type': 'text/html;charset=UTF-8',
-            'Retry-After': '60',
-            'Cache-Control': 'no-store',
-          },
-        });
+  return await ctx.env.ASSETS.fetch(
+    new Request(new URL('/maintenance.html', request.url)),
+    {
+      cf: { cacheTtl: 0 }
+    }
+  ).then(async (res) => {
+    const html = await res.text();
+
+    return new Response(html, {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html",
+        "Retry-After": "60",
+        "Cache-Control": "no-store"
+      }
+    });
+  });
+      }
       }
     } catch {
       // KV unavailable — fail open (serve normally)
