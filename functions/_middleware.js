@@ -32,10 +32,8 @@ export async function onRequest(ctx) {
   if (!isBypassed && env?.MIUT_KV) {
     try {
       const mode = await env.MIUT_KV.get('maintenance_mode');
-      if (mode === 'true') {
+      if (mode === 'true' && !request.url.includes('maintenance.html')) {
   const url = new URL(request.url);
-
-  // Rewrite request internally to maintenance.html
   url.pathname = '/maintenance.html';
 
   const response = await fetch(url);
@@ -46,8 +44,8 @@ export async function onRequest(ctx) {
       "Content-Type": "text/html",
       "Retry-After": "60",
       "Cache-Control": "no-store"
-        }
-       });
+    }
+  });
       }
     } catch {
       // KV unavailable — fail open (serve normally)
