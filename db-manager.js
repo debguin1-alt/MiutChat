@@ -125,10 +125,14 @@ const _instances = new Map();
 /* ── Initialise a Firebase app + Firestore instance ─────────── */
 function _initDb(cfg) {
   if (_instances.has(cfg.name)) return _instances.get(cfg.name);
+  if (typeof firebase === 'undefined') {
+    throw new Error('Firebase SDK not loaded. Ensure Firebase compat scripts are included before db-manager.js.');
+  }
   let app;
   try { app = firebase.app(cfg.name); }
   catch { app = firebase.initializeApp(cfg.config, cfg.name); }
   const fs = firebase.firestore(app);
+  // Persistence: silently ignore if already enabled or in private browsing
   fs.enablePersistence({ synchronizeTabs: true }).catch(() => {});
   _instances.set(cfg.name, fs);
   return fs;
@@ -167,11 +171,22 @@ function _onFail(name, err) {
 
 /* ── Core: resolve the best database for a room code ────────── */
 async function getDb(roomCode) {
+  /* Guard: no active databases configured */
+  if (!_ACTIVE_DBS.length) {
+    throw new Error('No active database configured. Set active:true in _DB_CONFIGS and provide valid credentials.');
+  }
+
+  /* Guard: invalid room code passed in */
+  if (!roomCode || typeof roomCode !== 'string' || !roomCode.trim()) {
+    throw new Error('getDb: roomCode must be a non-empty string.');
+  }
+
   /* Fast path — already resolved and still healthy */
   if (_roomDbCache.has(roomCode)) {
     const name = _roomDbCache.get(roomCode);
-    if (_healthy(name)) return _instances.get(name);
-    _roomDbCache.delete(roomCode);
+    const inst = _instances.get(name);
+    if (inst && _healthy(name)) return inst;
+    _roomDbCache.delete(roomCode);  // stale — re-probe
   }
 
   /* Single DB shortcut — no probing needed */
@@ -207,9 +222,12 @@ async function getDb(roomCode) {
     }
   }
 
-  /* All failed — return primary as last resort */
-  const fallback = _ACTIVE_DBS[_hashRoom(roomCode)];
-  return _instances.get(fallback.name) ?? _initDb(fallback);
+  /* All failed — return primary as last resort to avoid blocking UI */
+  const fallback = _ACTIVE_DBS[_hashRoom(roomCode) % _ACTIVE_DBS.length];
+  try { return _instances.get(fallback.name) ?? _initDb(fallback); }
+  catch (err) {
+    throw new Error('All databases unavailable. Check your network and Firebase credentials. Last error: ' + err.message);
+  }
 }
 
 /* ── Status helper for debugging ─────────────────────────────── */

@@ -588,18 +588,31 @@ async function _decompress(buf) {
 }
 async function enc(text, code) {
   try {
-    const compressed = await _compress(text);
-    // Apply room-code substitution table BEFORE AES-GCM
+    // PART 5: beforeEncrypt hook
+    const _hookPayload = (typeof runHooks === 'function')
+      ? await runHooks('beforeEncrypt', { text, code })
+      : { text, code };
+    const _text = (_hookPayload && _hookPayload.text !== undefined) ? _hookPayload.text : text;
+
+    const compressed = await _compress(_text);
     const tbl        = await _getSubstTable(code);
     const substituted = _applySubst(compressed, tbl.fwd);
     const epoch      = _roomEpoch;
     const key        = await _getEpochKey(code, epoch);
-    const iv         = crypto.getRandomValues(new Uint8Array(12));
-    const ct         = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, substituted);
-    const out        = new Uint8Array(12 + ct.byteLength);
+
+    // PART 8: guaranteed unique IV via security.js (falls back to native)
+    const iv = (typeof generateIV === 'function') ? generateIV() : crypto.getRandomValues(new Uint8Array(12));
+
+    const ct  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, substituted);
+    const out = new Uint8Array(12 + ct.byteLength);
     out.set(iv, 0);
     out.set(new Uint8Array(ct), 12);
-    return `e${epoch}:${_b64uEnc(out)}`;
+    const result = `e${epoch}:${_b64uEnc(out)}`;
+
+    // PART 5: afterEncrypt hook
+    if (typeof runHooks === 'function') await runHooks('afterEncrypt', { result, epoch });
+
+    return result;
   } catch { return ''; }
 }
 async function dec(payload, code) {
@@ -1238,9 +1251,46 @@ window.addEventListener('DOMContentLoaded', () => {
       showInviteScreen();
       return;
     }
+    // Hash-based routing: miutchat.pages.dev/index.html#enterroom or #createroom
+    const _hash = (window.location.hash || '').replace('#','').toLowerCase();
+    if (_hash === 'enterroom' || _hash === 'joinroom') {
+      showScreen('join-screen');
+      // Pre-select the Enter tab
+      const tabs = document.querySelectorAll('[data-tab]');
+      tabs.forEach(t => { t.classList.toggle('active', t.dataset.tab === 'enter'); });
+      const panels = document.querySelectorAll('.tab-panel');
+      panels.forEach(p => { p.classList.toggle('active', p.id === 'panel-enter'); });
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+    if (_hash === 'createroom') {
+      showScreen('join-screen');
+      const tabs = document.querySelectorAll('[data-tab]');
+      tabs.forEach(t => { t.classList.toggle('active', t.dataset.tab === 'create'); });
+      const panels = document.querySelectorAll('.tab-panel');
+      panels.forEach(p => { p.classList.toggle('active', p.id === 'panel-create'); });
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+    // PWA / first-visit routing
+    // If launched from homescreen (standalone) or already has a session — skip landing
+    const _isPWA  = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const _hasSession = !!(loadSession()?.id && loadRoom());
     const me = loadSession(), room = loadRoom();
-    if (me?.id && room) { state.me = me; state.roomCode = room; checkApprovalAndBoot(); }
-    else showScreen('join-screen');
+    if (me?.id && room) { state.me = me; state.roomCode = room; checkApprovalAndBoot(); return; }
+    if (_isPWA) { showScreen('join-screen'); return; }
+    // First-time visitor check: if never visited, redirect to landing page
+    const _hasVisited = localStorage.getItem('miut_visited');
+    if (!_hasVisited) {
+      localStorage.setItem('miut_visited', '1');
+      // Only redirect if not already on index from landing (no referrer from same origin)
+      const _fromLanding = document.referrer && document.referrer.includes(window.location.hostname);
+      if (!_fromLanding && !inviteCode) {
+        window.location.href = '/landing.html';
+        return;
+      }
+    }
+    showScreen('join-screen');
   }, 1800);
 });
 
@@ -1766,15 +1816,13 @@ function _triggerSecurityLockdown(reason) {
 
 // ─── Anti-screenshot (screen capture API detection) ───────────────────────────
 function _initAntiCapture() {
-  // Detect if the screen is being shared / captured via VisibilityState API
-  // and warn the user without blocking functionality
-  if (typeof navigator.mediaDevices?.addEventListener !== 'undefined') {
-    try {
-      screen.orientation?.addEventListener('change', () => {}); // no-op to warm API
-    } catch {}
-  }
-  // Mark body as sensitive so CSS `content-visibility` rules can blur on print
   document.body.setAttribute('data-sensitive', '1');
+  // Delegate to security.js screen protection (PART 4)
+  if (typeof initScreenProtection === 'function') {
+    try {
+      initScreenProtection({ username: (state.me?.name || 'ANONYMOUS').toUpperCase() });
+    } catch (_e) {}
+  }
 }
 
 // ─── Message expiry sweep ─────────────────────────────────────────────────────
@@ -2082,7 +2130,7 @@ function startChatListeners() {
 
   _unsubMsgs = q.onSnapshot(snap => {
     let hasNew = false;
-    snap.docChanges().forEach(ch => {
+    snap.docChanges().forEach(async ch => {
       if (ch.type === 'modified') { patchMsg(ch.doc.id, ch.doc.data()); return; }
       if (ch.type !== 'added') return;
       const id = ch.doc.id, data = ch.doc.data();
@@ -2090,8 +2138,21 @@ function startChatListeners() {
       // Canary check — detect replay/injection (async, non-blocking)
       _registerCanary(id, data.enc || data.encData || '').catch(() => {});
       _renderedIds.add(id);
-      $('msg-skeleton') && ($('msg-skeleton').style.display = 'none'); $('room-welcome')?.style && ($('room-welcome').style.display = 'none');
-      renderMsg(data, id);
+      // PART 8: replay protection — reject stale or duplicate messages
+      const _msgTs = data.ts || 0;
+      if (_msgTs && typeof validateMessageTimestamp === 'function' && !validateMessageTimestamp(_msgTs)) {
+        // stale message outside replay window — skip render
+      } else {
+        if (typeof trackNonce === 'function' && !trackNonce(id)) {
+          // exact duplicate nonce — skip render
+        } else {
+          $('msg-skeleton') && ($('msg-skeleton').style.display = 'none'); $('room-welcome')?.style && ($('room-welcome').style.display = 'none');
+          // PART 5: afterReceive hook
+          let _rcvPayload = { id, data };
+          if (typeof runHooks === 'function') _rcvPayload = await runHooks('afterReceive', _rcvPayload);
+          renderMsg(_rcvPayload.data || data, _rcvPayload.id || id);
+        } // end trackNonce
+      } // end validateMessageTimestamp
       hasNew = true;
       const docTs = data.ts || 0;
       if (docTs > _lastCachedTs) _lastCachedTs = docTs;
@@ -2341,7 +2402,18 @@ async function sendMessage() {
   clearMyTyping();
 
   const ts_client = Date.now();
-  const encText   = await enc(text, state.roomCode);
+
+  // PART 5: beforeSend hook — can mutate { text }
+  let _sendPayload = { text };
+  if (typeof runHooks === 'function') _sendPayload = await runHooks('beforeSend', _sendPayload);
+  const _sendText = (_sendPayload && _sendPayload.text !== undefined) ? _sendPayload.text : text;
+
+  // PART 8: replay protection — timestamp validation
+  if (typeof validateMessageTimestamp === 'function' && !validateMessageTimestamp(ts_client)) {
+    toast('Send error', 'System clock skew detected — please check your device time.', '⚠'); return;
+  }
+
+  const encText   = await enc(_sendText, state.roomCode);
   const msgSig    = await signMsg(state.me.id, ts_client, encText);
 
   const msgData = {
@@ -2440,14 +2512,16 @@ function _renderReadBadge(wrapEl, readBy) {
   if (!wrapEl || !wrapEl.classList.contains('sent')) return;
   const statusEl = wrapEl.querySelector('.msg-status');
   if (!statusEl) return;
-  const readers = Object.keys(readBy || {}).filter(uid => uid !== state.me?.id);
-  if (readers.length === 0) {
+  // Filter out own UID and message sender — count other readers
+  const senderId = wrapEl.dataset.senderId || '';
+  const allReaders = Object.keys(readBy || {}).filter(uid => uid !== senderId);
+  if (allReaders.length === 0) {
     statusEl.textContent = '✓';
     statusEl.title = 'Sent';
     statusEl.classList.remove('msg-status-read');
   } else {
     statusEl.textContent = '✓✓';
-    statusEl.title = `Read by ${readers.length} member${readers.length > 1 ? 's' : ''}`;
+    statusEl.title = `Read by ${allReaders.length} member${allReaders.length > 1 ? 's' : ''}`;
     statusEl.classList.add('msg-status-read');
   }
 }
@@ -2604,6 +2678,25 @@ let _mentionActive = false;
 let _mentionStart  = -1;
 let _searchActive  = false;
 
+/**
+ * _readStatusBadge — builds the ✓ / ✓✓ span for sent messages.
+ * Reads readBy map safely; never throws.
+ */
+function _readStatusBadge(data) {
+  try {
+    const readBy  = data.readBy || {};
+    const sender  = data.senderId || '';
+    const readers = Object.keys(readBy).filter(uid => uid !== sender && uid !== state.me?.id);
+    // Also count if any uid other than sender has read
+    const allReaders = Object.keys(readBy).filter(uid => uid !== sender);
+    const hasRead = allReaders.length > 0;
+    const cls   = hasRead ? ' msg-status-read' : '';
+    const title = hasRead ? `Read by ${allReaders.length} member${allReaders.length !== 1 ? 's' : ''}` : 'Sent';
+    const tick  = hasRead ? '✓✓' : '✓';
+    return `<span class="msg-status${cls}" title="${title}">${tick}</span>`;
+  } catch { return '<span class="msg-status">✓</span>'; }
+}
+
 async function renderMsg(data, docId) {
   const area = $('messages-area'); if (!area) return;
 
@@ -2711,7 +2804,7 @@ async function renderMsg(data, docId) {
           <div class="msg-bubble">${bubble}</div>
           <div class="msg-meta">
             <span class="msg-time-sm">${fmtTime(data.ts)}</span>
-            ${isMine ? `<span class="msg-status${data.readBy && Object.keys(data.readBy).filter(u=>u!==data.senderId).length ? ' msg-status-read' : ''}" title="${data.readBy && Object.keys(data.readBy).filter(u=>u!==data.senderId).length ? 'Read' : 'Sent'}">${data.readBy && Object.keys(data.readBy).filter(u=>u!==data.senderId).length ? '✓✓' : '✓'}</span>` : ''}
+            ${isMine ? _readStatusBadge(data) : ''}
           </div>
           <div class="msg-reactions" data-rid="${esc(docId || '')}"></div>
         </div>
@@ -3551,6 +3644,11 @@ async function handleLogout() {
   state.me = null; state.roomCode = null;
   _renderedIds.clear(); _lastCachedTs = 0;
 
+  // PART 4: tear down screen protection on logout
+  if (typeof destroyScreenProtection === 'function') {
+    try { destroyScreenProtection(); } catch (_e) {}
+  }
+
   const ma = $('messages-area'); if (ma) ma.innerHTML = '';
   const ml = $('members-list');  if (ml) ml.innerHTML = '';
   const oc = $('online-count');  if (oc) oc.textContent = '0';
@@ -3841,4 +3939,12 @@ Object.assign(_W, {
   get state() { return state; },
   get db()    { return db; },
 });
+
+// Expose security module integration helpers for operator use
+if (typeof registerHook === 'function') _W.registerHook = registerHook;
+if (typeof runHooks     === 'function') _W.runHooks     = runHooks;
+if (typeof HOOK_EVENTS  !== 'undefined') _W.HOOK_EVENTS = HOOK_EVENTS;
+if (typeof isEnabled    === 'function') _W.isEnabled    = isEnabled;
+if (typeof setFlag      === 'function') _W.setFlag      = setFlag;
+if (typeof enforceRateLimit === 'function') _W.enforceRateLimit = enforceRateLimit;
 })(window);

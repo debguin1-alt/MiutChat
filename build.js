@@ -89,6 +89,7 @@ const JS_JOBS = [
   ['crypto-bridge.js',       'crypto-bridge.min.js',       'es2020'],
   ['storage-engine.js',      'storage-engine.min.js',      'es2020'],
   ['placeholder-rotator.js', 'placeholder-rotator.min.js', 'es2017'],
+  ['security.js',            'security.min.js',            'es2020'],
 ];
 for (const [inp, out, tgt] of JS_JOBS) {
   if (!fs.existsSync(path.join(ROOT, inp))) { log('  skip', inp+' not found', C.yellow); continue; }
@@ -155,7 +156,7 @@ log('HASH', 'SRI sha256');
 const SRI_FILES = [
   'app.min.js','db-manager.min.js','sw-bridge.min.js','placeholder-rotator.min.js',
   'style.min.css','crypto-engine.min.js','crypto-bridge.min.js','storage-engine.min.js',
-  'crypto-worker.min.js',
+  'crypto-worker.min.js','security.min.js',
 ];
 for (const f of SRI_FILES) {
   const fp = DIST+'/'+f;
@@ -174,7 +175,8 @@ html = html
   .replace(/src="placeholder-rotator\.js"/g, 'src="placeholder-rotator.min.js"')
   .replace(/src="crypto-engine\.js"/g,       'src="crypto-engine.min.js"')
   .replace(/src="crypto-bridge\.js"/g,       'src="crypto-bridge.min.js"')
-  .replace(/src="storage-engine\.js"/g,      'src="storage-engine.min.js"');
+  .replace(/src="storage-engine\.js"/g,      'src="storage-engine.min.js"')
+  .replace(/src="security\.js"/g,            'src="security.min.js"');
 
 if (isProd) {
   for (const [f, h] of Object.entries(sri)) {
@@ -194,8 +196,9 @@ fs.writeFileSync(DIST+'/index.html', html);
 log('STATIC', 'copy assets');
 const STATIC = [
   'manifest.json','offline.html','.nojekyll','firestore.rules',
-  '_headers','_redirects','config.js','privacy.html','landing.html',
-  'terms.html','about.html','robots.txt','sitemap.xml','wrangler.toml','CNAME',
+  '_headers','_redirects','_middleware.js','config.js','privacy.html','landing.html',
+  'terms.html','about.html','404.html','maintenance.html',
+  'robots.txt','sitemap.xml','wrangler.toml','CNAME',
 ];
 let nc = 0;
 for (const f of STATIC) {

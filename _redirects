@@ -18,3 +18,10 @@ http://miutchat.pages.dev/* https://miutchat.pages.dev/:splat 301
 /backup*                      /api/canary  302
 /.well-known/security.txt     /security.txt 200
 
+# Hash-based section routing (SEO-friendly canonical URLs)
+/createroom  /index.html#createroom  301
+/enterroom   /index.html#enterroom   301
+/joinroom    /index.html#enterroom   301
+
+# 404 catch-all
+/*           /404.html               404

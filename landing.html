@@ -22,7 +22,13 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 <link rel="icon" type="image/png" href="icons/icon-192.png"/>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","name":"MiutChat","url":"https://miutchat.pages.dev/","description":"Secure anonymous real-time encrypted chat. No accounts, no tracking.","potentialAction":{"@type":"EntryPoint","urlTemplate":"https://miutchat.pages.dev/index.html"}}
+{"@context":"https://schema.org","@type":"WebSite","name":"MiutChat","url":"https://miutchat.pages.dev/","description":"Secure anonymous real-time end-to-end encrypted chat. No accounts, no tracking.","potentialAction":[{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://miutchat.pages.dev/index.html#enterroom?code={search_term_string}"},"query-input":"required name=search_term_string"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SiteLinksSearchBox","url":"https://miutchat.pages.dev/","potentialAction":{"@type":"SearchAction","target":"https://miutchat.pages.dev/index.html?action=join&q={search_term_string}","query-input":"required name=search_term_string"}}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"ItemList","name":"MiutChat Sections","itemListElement":[{"@type":"SiteLinksSearchBox","position":1,"name":"Create Room","url":"https://miutchat.pages.dev/index.html#createroom","description":"Create an anonymous end-to-end encrypted chat room instantly — no account needed."},{"@type":"ListItem","position":2,"name":"Enter Room","url":"https://miutchat.pages.dev/index.html#enterroom","description":"Join an existing encrypted room with a room code."},{"@type":"ListItem","position":3,"name":"About MiutChat","url":"https://miutchat.pages.dev/about.html","description":"Learn about MiutChat — open-source, zero-knowledge, anonymous encrypted messaging."},{"@type":"ListItem","position":4,"name":"Privacy Policy","url":"https://miutchat.pages.dev/privacy.html","description":"How MiutChat protects your privacy — we collect no personal data."}]}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -149,20 +155,20 @@ footer{padding:48px 6% 32px;background:var(--bg2);border-top:1px solid var(--bdr
   <div class="nlinks">
     <a href="#features" class="nh">Features</a>
     <a href="#privacy" class="nh">Privacy</a>
-    <a href="privacy.html" class="nh">Policy</a>
-    <a href="index.html" class="ncta">Launch App →</a>
+    <a href="/privacy.html" class="nh">Policy</a>
+    <a href="/index.html" class="ncta">Launch App →</a>
   </div>
 </nav>
 
 <!-- HERO -->
-<section class="hero">
+<section class="hero" id="home">
   <div class="hbg"></div>
   <div class="hgrid"></div>
   <div class="hbadge"><span class="hpulse"></span>ANONYMOUS · ENCRYPTED · EPHEMERAL</div>
   <h1 class="htitle">No accounts.<br/><span>No identity.</span><br/>Just chat.</h1>
-  <p class="hsub">MiutChat is end-to-end encrypted anonymous group chat. Your room code is the only key. We never store, see, or sell anything.</p>
+  <p class="hsub">MiutChat is end-to-end encrypted anonymous group chat. Your room code is the only key. We never store, see, or sell anything. No page scroll in-app — everything opens as a dedicated page.</p>
   <div class="hactions">
-    <a href="index.html" class="btn-p">
+    <a href="/index.html" class="btn-p">
       <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M17.5 2.5L9 11M17.5 2.5L12 17.5l-3-6.5-6.5-3L17.5 2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Start Chatting
     </a>
@@ -175,18 +181,34 @@ footer{padding:48px 6% 32px;background:var(--bg2);border-top:1px solid var(--bdr
       <span class="ptitle">MIUT · GHOST PROTOCOL · ENCRYPTED</span>
     </div>
     <div class="pbody">
-      <div class="psys"><span>👻 DARK OWL44 created this room</span></div>
+      <div class="psys"><span>🔒 End-to-end encrypted · Room active</span></div>
       <div class="pmsg received">
         <div class="pav" style="background:#4ecdc4">DO</div>
-        <div><div class="pbub">This room vanishes when we leave. Zero trace.</div><div class="ptime">11:42</div></div>
+        <div>
+          <div class="pbub">This room vanishes when we leave. Zero trace.</div>
+          <div class="ptime">11:42</div>
+        </div>
       </div>
       <div class="pmsg sent">
         <div class="pav" style="background:#8b5cf6">VF</div>
-        <div><div class="pbub">No account needed — that's exactly what I wanted 🔒</div><div class="ptime">11:43 ✓✓</div></div>
+        <div>
+          <div class="pbub">No account needed — that's exactly what I wanted 🔒</div>
+          <div class="ptime">11:43 ✓✓</div>
+        </div>
       </div>
       <div class="pmsg received">
         <div class="pav" style="background:#4ecdc4">DO</div>
-        <div><div class="pbub">AES-256-GCM. Even the server can't read this.</div><div class="ptime">11:43</div></div>
+        <div>
+          <div class="pbub">AES-256-GCM. Even the server can't read this.</div>
+          <div class="ptime">11:43</div>
+        </div>
+      </div>
+      <div class="pmsg sent">
+        <div class="pav" style="background:#8b5cf6">VF</div>
+        <div>
+          <div class="pbub">And no one can intercept the key either 🛡</div>
+          <div class="ptime">11:44 ✓✓</div>
+        </div>
       </div>
     </div>
   </div>
@@ -274,7 +296,7 @@ footer{padding:48px 6% 32px;background:var(--bg2);border-top:1px solid var(--bdr
   <div class="ctacard">
     <h2 class="ctatitle">Ready to disappear?</h2>
     <p class="ctasub">No account. No setup. Just create a room, share the code, and chat — knowing nothing you say can be traced back to you.</p>
-    <a href="index.html" class="btn-p" style="display:inline-flex;justify-content:center">
+    <a href="/index.html" class="btn-p" style="display:inline-flex;justify-content:center">
       <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M17.5 2.5L9 11M17.5 2.5L12 17.5l-3-6.5-6.5-3L17.5 2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Start Chatting — Free
     </a>
@@ -291,20 +313,19 @@ footer{padding:48px 6% 32px;background:var(--bg2);border-top:1px solid var(--bdr
     </div>
     <div class="flg">
       <div class="flg-title">APP</div>
-      <a href="index.html">Launch Chat</a>
+      <a href="/index.html">Launch Chat</a>
       <a href="#features">Features</a>
       <a href="#privacy">Privacy</a>
     </div>
     <div class="flg">
       <div class="flg-title">LEGAL</div>
-      <a href="privacy.html">Privacy Policy</a>
-      <a href="privacy.html#terms">Terms of Service</a>
-      <a href="privacy.html#cookies">Cookie Policy</a>
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/terms.html">Terms of Service</a>
     </div>
     <div class="flg">
       <div class="flg-title">PROJECT</div>
       <a href="https://github.com/debguin1-alt/MiutChat" target="_blank" rel="noopener">GitHub</a>
-      <a href="privacy.html#about">About</a>
+      <a href="/about.html">About</a>
       <a href="sitemap.xml">Sitemap</a>
     </div>
   </div>

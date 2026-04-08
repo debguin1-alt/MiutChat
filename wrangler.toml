@@ -20,3 +20,7 @@ RL_ENTER_MAX = "5"
 RL_ENTER_WIN_S = "60"
 RL_SEND_MAX = "15"
 RL_SEND_WIN_S = "10"
+
+[[kv_namespaces]]
+binding = "MIUT_KV"
+id      = "REPLACE_WITH_YOUR_MIUT_KV_NAMESPACE_ID"
