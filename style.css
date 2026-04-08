@@ -325,6 +325,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .msg-wrapper.received .msg-bubble-wrap{flex-direction:row}
 .msg-small-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--fui);font-size:.59rem;font-weight:700;color:#fff;flex-shrink:0;align-self:flex-end;margin-bottom:2px}
 .msg-inner{display:flex;flex-direction:column;min-width:0}
+.msg-wrapper.sent .msg-inner{align-items:flex-end}
 .msg-sender{font-family:var(--fui);font-size:.6rem;font-weight:700;letter-spacing:1.5px;margin-bottom:4px;padding-left:2px}
 .msg-bubble{padding:10px 14px;border-radius:20px;font-family:var(--fmono);font-size:.87rem;line-height:1.64;word-break:break-word;overflow-wrap:anywhere;letter-spacing:.1px;transition:box-shadow var(--fast) ease,border-color var(--fast) ease}
 .msg-wrapper.sent .msg-bubble{background:linear-gradient(135deg,var(--teal) 0%,var(--teal2) 100%);color:var(--bg);border-bottom-right-radius:6px;box-shadow:0 2px 14px rgba(78,205,196,.22)}

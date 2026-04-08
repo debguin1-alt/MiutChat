@@ -288,6 +288,16 @@ window._dbFirebaseReady = new Promise((resolve, reject) => {
   }
 });
 
+/* ── Explicit window exports ─────────────────────────────────────
+ * Assigned explicitly so getDb / getDbStatus / resetDbHealth are
+ * accessible globally regardless of build tool output format.
+ * Without this, esbuild --platform=browser can scope them to the
+ * file, making them invisible to app.js.
+ * ────────────────────────────────────────────────────────────── */
+window.getDb         = getDb;
+window.getDbStatus   = getDbStatus;
+window.resetDbHealth = resetDbHealth;
+
 window._dbFirebaseReady.catch(err => {
   // Surface a visible banner so developers immediately see the issue
   const banner = document.createElement('div');
