@@ -50,7 +50,7 @@ p{font-size:.76rem;color:var(--tx2);line-height:1.85;margin-bottom:20px}
 <div class="card">
   <div class="icon"><div class="ring"></div></div>
   <h1>We'll be back soon.</h1>
-  <p>MiutChat is currently undergoing scheduled maintenance. We'll be back shortly. Sorry for inconvenience.</p>
+  <p>MiutChat is temporarily unavailable due to scheduled maintenance aimed at enhancing performance, stability, and security. We’ll be back shortly. Thank you for your patience and understanding.</p>
   <div class="badge"><span class="pulse"></span>WORKING ON IT</div>
   <p style="font-size:.65rem;margin-top:16px;margin-bottom:0;color:var(--tx2)">Auto-refreshes in <span id="cd">60</span>s</p>
 </div>
