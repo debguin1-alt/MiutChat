@@ -176,7 +176,7 @@ function _wireAllHandlers() {
 // characters like / cause path-traversal, and . / .. cause SDK errors.
 // Applied at every entry point (handleCreate, handleEnter, joinFromInvite).
 const _ROOM_CODE_RE = /^[a-zA-Z0-9 _\-@#!?+*=.]{6,64}$/;
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '1.0.0';
 
 function validateRoomCode(code) {
   if (!code || typeof code !== 'string') {
@@ -1332,23 +1332,33 @@ function setupSidebar() {
     document.body.appendChild(ov);
   }
   const ov = $('sidebar-overlay');
-  // Only close when the OVERLAY BACKDROP itself is tapped, not when events bubble from sidebar children
-  // Overlay close — only when clicking the BACKDROP (not sidebar children)
+
+  // Time-guard: track last sidebar touch so overlay ignores rapid follow-on events
+  let _lastSidebarTouch = 0;
+
+  // Overlay: only close when the DARK BACKDROP is tapped — never the sidebar
   ov.addEventListener('click', e => {
+    if (Date.now() - _lastSidebarTouch < 80) return; // debounce
     if (!e.target.closest('#sidebar')) closeSidebar();
   });
+  ov.addEventListener('touchstart', e => {
+    if (e.target.closest('#sidebar')) { e.stopPropagation(); }
+  }, { passive: true });
   ov.addEventListener('touchend', e => {
+    if (Date.now() - _lastSidebarTouch < 80) return; // debounce
     if (!e.target.closest('#sidebar')) { e.preventDefault(); closeSidebar(); }
   }, { passive: false });
 
-  // Sidebar: swallow ALL events so nothing ever reaches the overlay underneath
+  // Sidebar: capture ALL events at capture phase so they never reach overlay
   const sidebarEl = $('sidebar');
   if (sidebarEl) {
-    sidebarEl.addEventListener('click',      e => e.stopPropagation());
-    sidebarEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-    sidebarEl.addEventListener('touchend',   e => e.stopPropagation(), { passive: false });
-    sidebarEl.addEventListener('touchmove',  e => e.stopPropagation(), { passive: true });
-    sidebarEl.addEventListener('pointerdown',e => e.stopPropagation());
+    // Use capture:true to intercept BEFORE bubbling to overlay
+    sidebarEl.addEventListener('click',       e => { e.stopPropagation(); }, true);
+    sidebarEl.addEventListener('touchstart',  e => { _lastSidebarTouch = Date.now(); e.stopPropagation(); }, { capture: true, passive: true });
+    sidebarEl.addEventListener('touchend',    e => { _lastSidebarTouch = Date.now(); e.stopPropagation(); }, { capture: true, passive: false });
+    sidebarEl.addEventListener('touchmove',   e => { e.stopPropagation(); }, { capture: true, passive: true });
+    sidebarEl.addEventListener('pointerdown', e => { e.stopPropagation(); }, true);
+    sidebarEl.addEventListener('pointerup',   e => { e.stopPropagation(); }, true);
   }
 
   // Wire hamburger — attach to existing HTML element OR inject a new one
@@ -3095,64 +3105,86 @@ function showInlineActions(wrap, docId, plainText, msgTs, isMine) {
   const emojiRow = document.createElement('div');
   emojiRow.className = 'strip-emojis';
 
-  /** Creates a single quick-react button */
-  function makeEmojiBtn(emoji, extended) {
+  // Unified reaction handler — works for both click and touch
+  function _reactWith(emoji) {
+    toggleReaction(docId, emoji);
+    strip.remove();
+  }
+
+  // Makes a quick-react OR grid emoji button
+  function makeEmojiBtn(emoji, isGrid) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = extended ? 'strip-emoji-grid-btn' : 'strip-emoji';
+    btn.className = isGrid ? 'strip-emoji-grid-btn' : 'strip-emoji';
     btn.textContent = emoji;
-    btn.setAttribute('aria-label', 'React ' + emoji);
-    btn.addEventListener('click', e => {
+    btn.setAttribute('aria-label', 'React with ' + emoji);
+    let _touched = false;
+    btn.addEventListener('touchstart', () => { _touched = false; }, { passive: true });
+    btn.addEventListener('touchmove',  () => { _touched = true;  }, { passive: true });
+    btn.addEventListener('touchend',   e => {
       e.preventDefault(); e.stopPropagation();
-      toggleReaction(docId, emoji);
-      strip.remove();
-    });
-    btn.addEventListener('touchend', e => {
-      e.preventDefault(); e.stopPropagation();
-      toggleReaction(docId, emoji);
-      strip.remove();
+      if (!_touched) _reactWith(emoji); // only fire if not a scroll
     }, { passive: false });
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _reactWith(emoji);
+    });
     return btn;
   }
 
   // 8 quick emojis
-  REACTION_EMOJIS.forEach(emoji => emojiRow.appendChild(makeEmojiBtn(emoji, false)));
+  REACTION_EMOJIS.forEach(e2 => emojiRow.appendChild(makeEmojiBtn(e2, false)));
 
-  // ➕ More button — toggles the extended 32-emoji grid below
+  // ➕ More button
   const moreBtn = document.createElement('button');
   moreBtn.type = 'button';
-  moreBtn.className = 'strip-emoji strip-emoji-more';
+  moreBtn.className = 'strip-emoji-more';
   moreBtn.setAttribute('aria-label', 'More reactions');
-  moreBtn.setAttribute('title', 'More');
-  moreBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none" width="15" height="15"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+  moreBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none" width="14" height="14"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
 
-  moreBtn.addEventListener('click', e => {
-    e.preventDefault(); e.stopPropagation();
-    _toggleEmojiGrid();
-  });
+  let _gridOpen = false;
+  let _grid = null;
+
+  function _openGrid() {
+    if (_grid && strip.contains(_grid)) return; // already open
+    _grid = document.createElement('div');
+    _grid.className = 'strip-emoji-grid';
+    EXTENDED_EMOJIS.forEach(e2 => _grid.appendChild(makeEmojiBtn(e2, true)));
+    const divider = strip.querySelector('.strip-divider');
+    if (divider) strip.insertBefore(_grid, divider);
+    else strip.appendChild(_grid);
+    // Animate open
+    const h = _grid.scrollHeight;
+    _grid.style.maxHeight = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      _grid.style.maxHeight = h + 'px';
+      _grid.classList.add('open');
+    }));
+    moreBtn.classList.add('active');
+    _gridOpen = true;
+  }
+
+  function _closeGrid() {
+    if (!_grid) return;
+    _grid.style.maxHeight = '0';
+    _grid.classList.remove('open');
+    moreBtn.classList.remove('active');
+    _gridOpen = false;
+    setTimeout(() => { if (_grid && _grid.parentNode) _grid.remove(); _grid = null; }, 240);
+  }
+
+  function _toggleGrid() {
+    _gridOpen ? _closeGrid() : _openGrid();
+  }
+
+  let _moreTouched = false;
+  moreBtn.addEventListener('touchstart', () => { _moreTouched = false; }, { passive: true });
+  moreBtn.addEventListener('touchmove',  () => { _moreTouched = true;  }, { passive: true });
   moreBtn.addEventListener('touchend', e => {
     e.preventDefault(); e.stopPropagation();
-    _toggleEmojiGrid();
+    if (!_moreTouched) _toggleGrid();
   }, { passive: false });
-
-  function _toggleEmojiGrid() {
-    const existing = strip.querySelector('.strip-emoji-grid');
-    if (existing) {
-      existing.style.maxHeight = '0';
-      setTimeout(() => existing.remove(), 200);
-      moreBtn.classList.remove('active');
-      return;
-    }
-    const grid = document.createElement('div');
-    grid.className = 'strip-emoji-grid';
-    EXTENDED_EMOJIS.forEach(emoji => grid.appendChild(makeEmojiBtn(emoji, true)));
-    // Insert AFTER emojiRow (before divider)
-    const divider = strip.querySelector('.strip-divider');
-    if (divider) strip.insertBefore(grid, divider);
-    else strip.insertBefore(grid, strip.children[1] || null);
-    requestAnimationFrame(() => { grid.style.maxHeight = grid.scrollHeight + 'px'; });
-    moreBtn.classList.add('active');
-  }
+  moreBtn.addEventListener('click', e => { e.stopPropagation(); _toggleGrid(); });
 
   emojiRow.appendChild(moreBtn);
   strip.appendChild(emojiRow);
