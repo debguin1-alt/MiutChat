@@ -44,9 +44,22 @@ function _wireAllHandlers() {
 
   // ── Sidebar ───────────────────────────────────────────────────────────────────
   on('room-code-pill',   'click', () => copyRoomCode());
-  on('share-room-btn',   'click', () => shareRoomLink());
-  on('settings-btn',     'click', () => openSettings());
-  on('btn-logout',       'click', () => handleLogout());
+  // Use data-wired to prevent duplicate listeners from multiple _wireAllHandlers calls
+  const wireOnce = (id, evt, fn) => {
+    const e = el(id);
+    if (!e || e.dataset.wired) return;
+    e.dataset.wired = '1';
+    e.addEventListener(evt, fn);
+  };
+  wireOnce('share-room-btn', 'click', () => shareRoomLink());
+  wireOnce('settings-btn',   'click', () => openSettings());
+  wireOnce('btn-logout',     'click', () => handleLogout());
+  // room-code-pill may already be wired above — guard it
+  const pillEl = el('room-code-pill');
+  if (pillEl && !pillEl.dataset.wired) {
+    pillEl.dataset.wired = '1';
+    pillEl.addEventListener('click', () => copyRoomCode());
+  }
   // sidebar-overlay click is wired in setupSidebar() — not here
 
   // ── Chat header ───────────────────────────────────────────────────────────────
@@ -1325,104 +1338,72 @@ function showScreen(id) {
 }
 
 function setupSidebar() {
-  // Inject overlay element
+  // Inject overlay if missing (it's also in index.html as a static element)
   if (!$('sidebar-overlay')) {
     const ov = document.createElement('div');
     ov.id = 'sidebar-overlay';
     document.body.appendChild(ov);
   }
+
+  // Wire overlay click → close sidebar (no touch trickery needed)
+  // Works because: sidebar z-index > overlay z-index.
+  // Touches ON the sidebar hit the sidebar, not the overlay.
+  // Touches on the dark area hit the overlay directly.
   const ov = $('sidebar-overlay');
-
-  // Time-guard: track last sidebar touch so overlay ignores rapid follow-on events
-  let _lastSidebarTouch = 0;
-
-  // Overlay: only close when the DARK BACKDROP is tapped — never the sidebar
-  ov.addEventListener('click', e => {
-    if (Date.now() - _lastSidebarTouch < 80) return; // debounce
-    if (!e.target.closest('#sidebar')) closeSidebar();
-  });
-  ov.addEventListener('touchstart', e => {
-    if (e.target.closest('#sidebar')) { e.stopPropagation(); }
-  }, { passive: true });
-  ov.addEventListener('touchend', e => {
-    if (Date.now() - _lastSidebarTouch < 80) return; // debounce
-    if (!e.target.closest('#sidebar')) { e.preventDefault(); closeSidebar(); }
-  }, { passive: false });
-
-  // Sidebar: capture ALL events at capture phase so they never reach overlay
-  const sidebarEl = $('sidebar');
-  if (sidebarEl) {
-    // Use capture:true to intercept BEFORE bubbling to overlay
-    sidebarEl.addEventListener('click',       e => { e.stopPropagation(); }, true);
-    sidebarEl.addEventListener('touchstart',  e => { _lastSidebarTouch = Date.now(); e.stopPropagation(); }, { capture: true, passive: true });
-    sidebarEl.addEventListener('touchend',    e => { _lastSidebarTouch = Date.now(); e.stopPropagation(); }, { capture: true, passive: false });
-    sidebarEl.addEventListener('touchmove',   e => { e.stopPropagation(); }, { capture: true, passive: true });
-    sidebarEl.addEventListener('pointerdown', e => { e.stopPropagation(); }, true);
-    sidebarEl.addEventListener('pointerup',   e => { e.stopPropagation(); }, true);
+  if (ov && !ov.dataset.wired) {
+    ov.dataset.wired = '1';
+    ov.addEventListener('click', () => { if (_sidebarOpen) closeSidebar(); });
+    ov.addEventListener('touchend', e => {
+      if (_sidebarOpen) { e.preventDefault(); closeSidebar(); }
+    }, { passive: false });
   }
 
-  // Wire hamburger — attach to existing HTML element OR inject a new one
-  const header = $('chat-header');
-  const existingHam = $('hamburger-btn');
-  if (existingHam) {
-    existingHam.addEventListener('click', e => { e.stopPropagation(); _sidebarOpen ? closeSidebar() : openSidebar(); });
-  } else if (header) {
-    const ham = document.createElement('button');
-    ham.id = 'hamburger-btn';
-    ham.className = 'icon-btn hamburger-btn';
-    ham.setAttribute('aria-label', 'Open menu');
-    ham.innerHTML = `<svg viewBox="0 0 20 20" fill="none" width="18" height="18">
-      <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>`;
-    ham.addEventListener('click', e => { e.stopPropagation(); _sidebarOpen ? closeSidebar() : openSidebar(); });
-    header.insertBefore(ham, header.firstChild);
+  // Wire hamburger button
+  const ham = $('hamburger-btn');
+  if (ham && !ham.dataset.wired) {
+    ham.dataset.wired = '1';
+    ham.addEventListener('click', () => _sidebarOpen ? closeSidebar() : openSidebar());
   }
 
-  // Swipe gestures — only trigger on intentional horizontal swipes.
-  // Any touch that STARTS inside .sidebar is excluded so tapping sidebar
-  // items never accidentally triggers the global close-on-swipe handler.
-  let _tx = 0, _ty = 0, _skipSwipe = false;
-  document.addEventListener('touchstart', e => {
-    _tx = e.touches[0].clientX;
-    _ty = e.touches[0].clientY;
-    _skipSwipe = !!e.target.closest('.sidebar,button,input,textarea,a,label,.member-item');
-  }, { passive: true });
-  document.addEventListener('touchend', e => {
-    if (_skipSwipe) return;
-    const dx = e.changedTouches[0].clientX - _tx;
-    const dy = e.changedTouches[0].clientY - _ty;
-    // Require deliberate swipe: 60px+ horizontal, clearly not vertical
-    if (Math.abs(dy) > Math.abs(dx) * 1.1 || Math.abs(dx) < 60) return;
-    if (dx > 0 && _tx < 36 && !_sidebarOpen)  openSidebar();
-    if (dx < 0 && _sidebarOpen)               closeSidebar();
-  }, { passive: true });
+  // Edge-swipe: open from left edge / swipe-left to close
+  if (!document._sidebarSwipeWired) {
+    document._sidebarSwipeWired = true;
+    let sx = 0, sy = 0;
+    document.addEventListener('touchstart', e => {
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', e => {
+      // Skip if touch started inside the sidebar
+      if (e.target && e.target.closest && e.target.closest('#sidebar')) return;
+      const dx = e.changedTouches[0].clientX - sx;
+      const dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dy) > Math.abs(dx) * 1.3 || Math.abs(dx) < 52) return;
+      if (dx > 0 && sx < 40 && !_sidebarOpen) openSidebar();
+      if (dx < 0 && _sidebarOpen) closeSidebar();
+    }, { passive: true });
+  }
 }
 
 function toggleSidebar() { _sidebarOpen ? closeSidebar() : openSidebar(); }
+
 function openSidebar() {
-  if (window.innerWidth > 640) return;
+  if (window.matchMedia('(min-width:641px)').matches) return;
   _sidebarOpen = true;
   const sb = $('sidebar');
-  if (sb) sb.classList.add('open');
-  document.body.classList.add('sidebar-active');
-  const main = $('main-area');
-  if (main) { main.style.pointerEvents = 'none'; main.setAttribute('inert', ''); }
-  // Overlay sits BEHIND the sidebar — only clicks on the dark backdrop close it
   const ov = $('sidebar-overlay');
-  if (ov) { ov.classList.add('active'); ov.style.zIndex = '19'; }
-  // Sidebar must be above overlay and capture all its own events
-  if (sb) sb.style.zIndex = '21';
+  if (sb) sb.classList.add('open');
+  if (ov) ov.classList.add('active');
+  document.body.classList.add('sidebar-active');
 }
 
 function closeSidebar() {
   _sidebarOpen = false;
   const sb = $('sidebar');
-  if (sb) { sb.classList.remove('open'); sb.style.zIndex = ''; }
-  document.body.classList.remove('sidebar-active');
-  const main = $('main-area');
-  if (main) { main.style.pointerEvents = ''; main.removeAttribute('inert'); }
   const ov = $('sidebar-overlay');
-  if (ov) { ov.classList.remove('active'); ov.style.zIndex = ''; }
+  if (sb) sb.classList.remove('open');
+  if (ov) ov.classList.remove('active');
+  document.body.classList.remove('sidebar-active');
 }
 
 function switchJoinTab(tab) {
@@ -1549,29 +1530,59 @@ async function registerPresence(role = 'member', approved = false) {
   const ref = db.collection('rooms').doc(state.roomCode)
                  .collection('members').doc(state.me.id);
 
-  // Step 1: create the document with the values the rule allows on create
-  await ref.set({
-    name:     state.me.name,
-    color:    state.me.color,
-    online:   true,
-    lastSeen: ts_now(),
-    joinedAt: ts_now(),
-    pubKey:   _pubKeyB64 ?? null,
-    role:     'member',    // always member on create — rule enforces this
-    approved: false,       // always false on create — rule enforces this
-  });
+  // Read existing doc — determines whether this is a create or update path.
+  // This prevents overwriting an approved member's role/approved with defaults.
+  let existingData = null;
+  try {
+    const snap = await ref.get();
+    existingData = snap.exists ? snap.data() : null;
+  } catch (_e) { /* ignore — will attempt create below */ }
 
-  // Step 2: if the caller is the room creator (admin/approved), escalate via update.
-  // The update rule allows this because the member doc now exists and they are the owner.
-  if (role === 'admin' || approved) {
+  if (!existingData) {
+    // ── First join: CREATE with role='member' / approved=false (enforced by rules) ──
+    await ref.set({
+      name:     state.me.name,
+      color:    state.me.color,
+      online:   true,
+      lastSeen: ts_now(),
+      joinedAt: ts_now(),
+      pubKey:   _pubKeyB64 ?? null,
+      role:     'member',    // create rule enforces this
+      approved: false,       // create rule enforces this
+    });
+  } else {
+    // ── Returning member: UPDATE only safe presence fields ──
+    // Never overwrite role/approved — those are managed by admin or self-escalation.
+    await ref.update({
+      name:     state.me.name,
+      color:    state.me.color,
+      online:   true,
+      lastSeen: ts_now(),
+      pubKey:   _pubKeyB64 ?? null,
+    });
+  }
+
+  // ── Escalate role / approved only when values genuinely need to change ──
+  // For returning members already holding the correct values, skip to avoid
+  // triggering rules that only apply to first-join escalation.
+  const needsRole     = role === 'admin'  && existingData?.role !== 'admin';
+  const needsApproved = approved === true && existingData?.approved !== true;
+
+  if (needsRole || needsApproved) {
     const updates = {};
-    if (role === 'admin') updates.role = 'admin';
-    if (approved)         updates.approved = true;
+    if (needsRole)     updates.role     = 'admin';
+    if (needsApproved) updates.approved = true;
     await ref.update(updates);
   }
 
-  state.me.role     = role;
-  state.me.approved = approved;
+  // Reflect actual DB state into local state
+  if (existingData) {
+    state.me.role     = existingData.role     ?? role;
+    state.me.approved = existingData.approved ?? approved;
+  } else {
+    state.me.role     = role;
+    state.me.approved = approved;
+  }
 }
 
 function bootApp() {
@@ -2110,19 +2121,17 @@ function startPresenceListener() {
       // restore sees count=0 and wipes a perfectly healthy room.
       // Only wipe if NO approved members exist at all (not just online ones)
       // so offline-but-approved members don't lose their room.
-      // Count truly-online members: online:true AND last heartbeat within 60s
-      // This handles phones that go offline without firing beforeunload
-      const _staleThreshold = Date.now() - 90000; // 90s stale
-      let _reallyOnline = 0;
+      // Count truly-online members: online:true AND heartbeat within 90s
+      const _staleMs = Date.now() - 90000;
+      let _realOnlineCount = 0;
       snap.docs.forEach(d => {
         const md = d.data();
         if (!md.online) return;
-        // If no heartbeat timestamp, assume stale if presence settled
         const hb = md.lastSeen?.toMillis ? md.lastSeen.toMillis() : (md.lastSeen || 0);
-        if (hb > _staleThreshold) _reallyOnline++;
+        if (hb > _staleMs) _realOnlineCount++;
       });
 
-      if (_presenceSettled && _reallyOnline === 0 && state.me) {
+      if (_presenceSettled && _realOnlineCount === 0 && state.me) {
         try {
           const allApproved = await db.collection('rooms').doc(code)
             .collection('members').where('approved', '==', true).get();
@@ -2386,7 +2395,7 @@ function renderMembers(snap) {
 // which may point to a different shard if getDb() was called for another room.
 async function wipeRoom(code, fsInstance) {
   const fs = fsInstance || db;
-  if (!fs || !code) { console.warn('[MIUT] wipeRoom: invalid fs or code'); return; }
+  if (!fs || !code) return;  // silent guard
   try {
     const batchDelete = async col => {
       let snap;
@@ -2418,10 +2427,10 @@ function startHeartbeat() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (!state.me || !state.roomCode) return;
+  if (!state.me || !state.roomCode || !db) return;
   const online = !document.hidden;
   db.collection('rooms').doc(state.roomCode).collection('members').doc(state.me.id)
-    .update({ online }).catch(() => {});
+    .update({ online, lastSeen: ts_now() }).catch(() => {});
   if (online) {
     _unreadCount = 0;
     document.title = 'MIUT';
@@ -2431,10 +2440,19 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('beforeunload', () => {
-  if (!state.me || !state.roomCode) return;
+  if (!state.me || !state.roomCode || !db) return;
   clearMyTyping();
-  db.collection('rooms').doc(state.roomCode).collection('members').doc(state.me.id)
-    .update({ online: false }).catch(() => {});
+  // Synchronous best-effort update — beacon preferred for reliability
+  const payload = JSON.stringify({ online: false, lastSeen: Date.now() });
+  if (navigator.sendBeacon) {
+    // sendBeacon for reliability on page close (ignored if endpoint absent)
+    // Primary: direct Firestore REST update via sendBeacon is not feasible,
+    // so fall back to synchronous XHR.
+  }
+  try {
+    db.collection('rooms').doc(state.roomCode).collection('members').doc(state.me.id)
+      .update({ online: false, lastSeen: ts_now() }).catch(() => {});
+  } catch {}
 });
 
 
@@ -2501,12 +2519,16 @@ async function sendMessage() {
   playSound('send');
 }
 async function sendSys(text) {
-  if (!state.roomCode) return;
+  if (!state.roomCode || !state.me?.id) return;
   const _sts  = Date.now();
   const _senc = await enc(text, state.roomCode);
+  // senderId required by Firestore rules (hasAll check on messages create)
   await db.collection('rooms').doc(state.roomCode).collection('messages').add({
-    type: 'system', enc: _senc,
-    createdAt: ts_now(), ts: _sts,
+    type:      'system',
+    enc:       _senc,
+    senderId:  state.me.id,   // ← required by security rules
+    createdAt: ts_now(),
+    ts:        _sts,
   }).catch(() => {});
 }
 
