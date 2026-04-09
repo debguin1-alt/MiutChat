@@ -4,11 +4,7 @@
  * HOW TO TOGGLE MAINTENANCE:
  *   POST /api/maintenance  {"enabled":true}   with Authorization: Bearer YOUR_ADMIN_SECRET
  *   POST /api/maintenance  {"enabled":false}  to restore
- *
- * Error 1019 fix: NEVER fetch() the same origin inside middleware — that
- * causes a Worker-to-Worker loop. Instead, embed the maintenance HTML
- * directly so we return a Response without any outbound fetch.
- */
+  */
 
 const BYPASS_PATHS = [
   '/maintenance.html',
@@ -41,7 +37,6 @@ body{display:flex;flex-direction:column;align-items:center;justify-content:cente
 .icon{width:64px;height:64px;border-radius:18px;background:var(--tdim);border:1px solid var(--tb);display:flex;align-items:center;justify-content:center;margin:0 auto 24px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ring{width:36px;height:36px;border:2px solid rgba(78,205,196,.15);border-top-color:var(--t);border-radius:50%;animation:spin 1.2s linear infinite}
-.label{font-size:.55rem;font-weight:700;letter-spacing:5px;color:var(--t);margin-bottom:14px;font-family:inherit}
 h1{font-size:1.6rem;font-weight:700;color:#fff;line-height:1.2;margin-bottom:12px}
 p{font-size:.76rem;color:var(--tx2);line-height:1.85;margin-bottom:20px}
 .badge{display:inline-flex;align-items:center;gap:7px;padding:6px 14px;background:var(--tdim);border:1px solid var(--tb);border-radius:100px;font-size:.58rem;font-weight:700;letter-spacing:2px;color:var(--t)}
@@ -54,9 +49,8 @@ p{font-size:.76rem;color:var(--tx2);line-height:1.85;margin-bottom:20px}
 <div class="bg"></div>
 <div class="card">
   <div class="icon"><div class="ring"></div></div>
-  <div class="label">MAINTENANCE</div>
   <h1>We'll be back soon.</h1>
-  <p>MiutChat is currently undergoing scheduled maintenance. No data is lost. We'll be back shortly.</p>
+  <p>MiutChat is currently undergoing scheduled maintenance. We'll be back shortly. Sorry for inconvenience.</p>
   <div class="badge"><span class="pulse"></span>WORKING ON IT</div>
   <p style="font-size:.65rem;margin-top:16px;margin-bottom:0;color:var(--tx2)">Auto-refreshes in <span id="cd">60</span>s</p>
 </div>
