@@ -474,6 +474,9 @@ function trackNonce(nonce) {
  * Guarantees uniqueness (no counter-based reuse risk).
  */
 function generateIV() {
+  if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+    throw new Error('Web Crypto API not available. MiutChat requires a secure context (HTTPS).');
+  }
   return crypto.getRandomValues(new Uint8Array(12));
 }
 

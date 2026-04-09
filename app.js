@@ -176,6 +176,7 @@ function _wireAllHandlers() {
 // characters like / cause path-traversal, and . / .. cause SDK errors.
 // Applied at every entry point (handleCreate, handleEnter, joinFromInvite).
 const _ROOM_CODE_RE = /^[a-zA-Z0-9 _\-@#!?+*=.]{6,64}$/;
+const APP_VERSION = '2.0.1';
 
 function validateRoomCode(code) {
   if (!code || typeof code !== 'string') {
@@ -194,7 +195,7 @@ function validateRoomCode(code) {
 }
 
 const CONFIG = {
-  SESSION_KEY:        'miut_session_v1',
+  SESSION_KEY:        'miut_session_v2',
   ROOM_KEY:           'miut_room_v1',
   PREFS_KEY:          'miut_prefs_v1',
   TYPING_WRITE_MS:    2000,
@@ -1139,7 +1140,13 @@ function fmtBytes(b) {
 function ts_now() { return firebase.firestore.FieldValue.serverTimestamp(); }
 
 const AV_COLORS = ['#2dd4bf','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#6366f1','#a855f7'];
-const REACTION_EMOJIS = ['👍','❤️','😂','😮','😢','🔥','👀','🎉'];
+const REACTION_EMOJIS  = ['👍','❤️','😂','😮','😢','🔥','👀','🎉'];
+const EXTENDED_EMOJIS = [
+  '👍','❤️','😂','😮','😢','🔥','👀','🎉',
+  '🙏','💯','✨','🤔','😍','🥰','😎','🤯',
+  '😭','🫡','💀','🤣','😅','🙌','💪','🤝',
+  '👏','🫶','❗','✅','🚀','💬','🎯','⚡',
+];
 function avatarColor(s) { let h=0; for(const c of s) h=(h*31+c.charCodeAt(0))&0xffffffff; return AV_COLORS[Math.abs(h)%AV_COLORS.length]; }
 function initials(n)     { return n.trim().split(/\s+/).map(w=>w[0]?.toUpperCase()||'').join('').slice(0,2)||'??'; }
 
@@ -1326,15 +1333,22 @@ function setupSidebar() {
   }
   const ov = $('sidebar-overlay');
   // Only close when the OVERLAY BACKDROP itself is tapped, not when events bubble from sidebar children
-  ov.addEventListener('click', e => { if (e.target === ov) closeSidebar(); });
-  ov.addEventListener('touchend', e => { if (e.target === ov) { e.preventDefault(); closeSidebar(); } }, { passive: false });
+  // Overlay close — only when clicking the BACKDROP (not sidebar children)
+  ov.addEventListener('click', e => {
+    if (!e.target.closest('#sidebar')) closeSidebar();
+  });
+  ov.addEventListener('touchend', e => {
+    if (!e.target.closest('#sidebar')) { e.preventDefault(); closeSidebar(); }
+  }, { passive: false });
 
-  // Prevent any touch/click inside the sidebar from ever bubbling to the overlay
+  // Sidebar: swallow ALL events so nothing ever reaches the overlay underneath
   const sidebarEl = $('sidebar');
   if (sidebarEl) {
-    sidebarEl.addEventListener('click',    e => e.stopPropagation());
-    sidebarEl.addEventListener('touchend', e => e.stopPropagation());
+    sidebarEl.addEventListener('click',      e => e.stopPropagation());
     sidebarEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    sidebarEl.addEventListener('touchend',   e => e.stopPropagation(), { passive: false });
+    sidebarEl.addEventListener('touchmove',  e => e.stopPropagation(), { passive: true });
+    sidebarEl.addEventListener('pointerdown',e => e.stopPropagation());
   }
 
   // Wire hamburger — attach to existing HTML element OR inject a new one
@@ -1378,20 +1392,27 @@ function toggleSidebar() { _sidebarOpen ? closeSidebar() : openSidebar(); }
 function openSidebar() {
   if (window.innerWidth > 640) return;
   _sidebarOpen = true;
-  $('sidebar')?.classList.add('open');
+  const sb = $('sidebar');
+  if (sb) sb.classList.add('open');
   document.body.classList.add('sidebar-active');
   const main = $('main-area');
   if (main) { main.style.pointerEvents = 'none'; main.setAttribute('inert', ''); }
-  $('sidebar-overlay')?.classList.add('active');
+  // Overlay sits BEHIND the sidebar — only clicks on the dark backdrop close it
+  const ov = $('sidebar-overlay');
+  if (ov) { ov.classList.add('active'); ov.style.zIndex = '19'; }
+  // Sidebar must be above overlay and capture all its own events
+  if (sb) sb.style.zIndex = '21';
 }
 
 function closeSidebar() {
   _sidebarOpen = false;
-  $('sidebar')?.classList.remove('open');
+  const sb = $('sidebar');
+  if (sb) { sb.classList.remove('open'); sb.style.zIndex = ''; }
   document.body.classList.remove('sidebar-active');
   const main = $('main-area');
   if (main) { main.style.pointerEvents = ''; main.removeAttribute('inert'); }
-  $('sidebar-overlay')?.classList.remove('active');
+  const ov = $('sidebar-overlay');
+  if (ov) { ov.classList.remove('active'); ov.style.zIndex = ''; }
 }
 
 function switchJoinTab(tab) {
@@ -1426,6 +1447,7 @@ async function handleCreate() {
   try {
     // getUID() throws if Anonymous Auth is unavailable (network down, not enabled in console)
     const uid = await getUID();
+    if (typeof getDb !== 'function') throw new Error('Database module not loaded. Please refresh.');
     db = await getDb(code);
     // Generate cryptographically random 16-byte salt for this room's PBKDF2
     const saltBytes = crypto.getRandomValues(new Uint8Array(16));
@@ -1522,6 +1544,7 @@ async function registerPresence(role = 'member', approved = false) {
     name:     state.me.name,
     color:    state.me.color,
     online:   true,
+    lastSeen: ts_now(),
     joinedAt: ts_now(),
     pubKey:   _pubKeyB64 ?? null,
     role:     'member',    // always member on create — rule enforces this
@@ -1817,11 +1840,14 @@ function _triggerSecurityLockdown(reason) {
 // ─── Anti-screenshot (screen capture API detection) ───────────────────────────
 function _initAntiCapture() {
   document.body.setAttribute('data-sensitive', '1');
-  // Delegate to security.js screen protection (PART 4)
-  if (typeof initScreenProtection === 'function') {
+  // Delegate to security.js screen protection — guard against double-init
+  if (typeof initScreenProtection === 'function' && !document.body.dataset.spInit) {
     try {
+      document.body.dataset.spInit = '1';
       initScreenProtection({ username: (state.me?.name || 'ANONYMOUS').toUpperCase() });
     } catch (_e) {}
+  } else if (typeof setScreenProtectionUsername === 'function' && document.body.dataset.spInit) {
+    try { setScreenProtectionUsername(state.me?.name || 'ANONYMOUS'); } catch {}
   }
 }
 
@@ -2074,7 +2100,19 @@ function startPresenceListener() {
       // restore sees count=0 and wipes a perfectly healthy room.
       // Only wipe if NO approved members exist at all (not just online ones)
       // so offline-but-approved members don't lose their room.
-      if (_presenceSettled && _onlineCount === 0 && state.me) {
+      // Count truly-online members: online:true AND last heartbeat within 60s
+      // This handles phones that go offline without firing beforeunload
+      const _staleThreshold = Date.now() - 90000; // 90s stale
+      let _reallyOnline = 0;
+      snap.docs.forEach(d => {
+        const md = d.data();
+        if (!md.online) return;
+        // If no heartbeat timestamp, assume stale if presence settled
+        const hb = md.lastSeen?.toMillis ? md.lastSeen.toMillis() : (md.lastSeen || 0);
+        if (hb > _staleThreshold) _reallyOnline++;
+      });
+
+      if (_presenceSettled && _reallyOnline === 0 && state.me) {
         try {
           const allApproved = await db.collection('rooms').doc(code)
             .collection('members').where('approved', '==', true).get();
@@ -2337,7 +2375,8 @@ function renderMembers(snap) {
 // wipeRoom accepts an explicit Firestore instance to avoid using the global `db`
 // which may point to a different shard if getDb() was called for another room.
 async function wipeRoom(code, fsInstance) {
-  const fs = fsInstance || db; // fallback to global only if not passed
+  const fs = fsInstance || db;
+  if (!fs || !code) { console.warn('[MIUT] wipeRoom: invalid fs or code'); return; }
   try {
     const batchDelete = async col => {
       let snap;
@@ -2362,9 +2401,9 @@ function startHeartbeat() {
   clearInterval(_heartbeat);
   _heartbeat = setInterval(() => {
     if (!state.roomCode || !state.me) return;
-    if (document.hidden) return; // tab not visible — skip write, saves Firestore quota
+    if (document.hidden) return;
     db.collection('rooms').doc(state.roomCode).collection('members').doc(state.me.id)
-      .update({ online: true }).catch(() => {});
+      .update({ online: true, lastSeen: ts_now() }).catch(() => {});
   }, CONFIG.HEARTBEAT_MS);
 }
 
@@ -2394,9 +2433,8 @@ async function sendMessage() {
   if (!checkSendRateLimit()) return;
 
   const input = $('msg-input');
-  // Strip zero-width and invisible unicode chars that could be used to spoof messages
-  const text  = (input?.value || '').replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '').trim();
-  if (!text || !state.roomCode) return;
+  const text  = (input?.value || '').replace(/[​-‍﻿­]/g, '').trim();
+  if (!text || !state.roomCode || !db) return;
   input.value = ''; input.style.height = 'auto';
   updateActionBtn();
   clearMyTyping();
@@ -3046,26 +3084,77 @@ function renderReactionsInto(container, reactions, docId) {
   });
 }
 function showInlineActions(wrap, docId, plainText, msgTs, isMine) {
+  // Remove any existing strip
   document.querySelectorAll('.msg-action-strip').forEach(s => s.remove());
-  if (navigator.vibrate) navigator.vibrate(18);
+  if (navigator.vibrate) try { navigator.vibrate(18); } catch {}
 
   const strip = document.createElement('div');
   strip.className = 'msg-action-strip';
 
-  // Quick emoji reactions row
+  // ── Emoji row — WhatsApp/Telegram style ─────────────────────────
   const emojiRow = document.createElement('div');
   emojiRow.className = 'strip-emojis';
-  REACTION_EMOJIS.forEach(emoji => {
+
+  /** Creates a single quick-react button */
+  function makeEmojiBtn(emoji, extended) {
     const btn = document.createElement('button');
-    btn.className = 'strip-emoji';
+    btn.type = 'button';
+    btn.className = extended ? 'strip-emoji-grid-btn' : 'strip-emoji';
     btn.textContent = emoji;
+    btn.setAttribute('aria-label', 'React ' + emoji);
     btn.addEventListener('click', e => {
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       toggleReaction(docId, emoji);
       strip.remove();
     });
-    emojiRow.appendChild(btn);
+    btn.addEventListener('touchend', e => {
+      e.preventDefault(); e.stopPropagation();
+      toggleReaction(docId, emoji);
+      strip.remove();
+    }, { passive: false });
+    return btn;
+  }
+
+  // 8 quick emojis
+  REACTION_EMOJIS.forEach(emoji => emojiRow.appendChild(makeEmojiBtn(emoji, false)));
+
+  // ➕ More button — toggles the extended 32-emoji grid below
+  const moreBtn = document.createElement('button');
+  moreBtn.type = 'button';
+  moreBtn.className = 'strip-emoji strip-emoji-more';
+  moreBtn.setAttribute('aria-label', 'More reactions');
+  moreBtn.setAttribute('title', 'More');
+  moreBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none" width="15" height="15"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+
+  moreBtn.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    _toggleEmojiGrid();
   });
+  moreBtn.addEventListener('touchend', e => {
+    e.preventDefault(); e.stopPropagation();
+    _toggleEmojiGrid();
+  }, { passive: false });
+
+  function _toggleEmojiGrid() {
+    const existing = strip.querySelector('.strip-emoji-grid');
+    if (existing) {
+      existing.style.maxHeight = '0';
+      setTimeout(() => existing.remove(), 200);
+      moreBtn.classList.remove('active');
+      return;
+    }
+    const grid = document.createElement('div');
+    grid.className = 'strip-emoji-grid';
+    EXTENDED_EMOJIS.forEach(emoji => grid.appendChild(makeEmojiBtn(emoji, true)));
+    // Insert AFTER emojiRow (before divider)
+    const divider = strip.querySelector('.strip-divider');
+    if (divider) strip.insertBefore(grid, divider);
+    else strip.insertBefore(grid, strip.children[1] || null);
+    requestAnimationFrame(() => { grid.style.maxHeight = grid.scrollHeight + 'px'; });
+    moreBtn.classList.add('active');
+  }
+
+  emojiRow.appendChild(moreBtn);
   strip.appendChild(emojiRow);
 
   // Divider
@@ -3133,15 +3222,18 @@ function showInlineActions(wrap, docId, plainText, msgTs, isMine) {
   requestAnimationFrame(() => strip.classList.add('visible'));
 
   const close = e => {
-    if (!strip.contains(e.target)) {
+    if (strip.isConnected && !strip.contains(e.target)) {
       strip.remove();
       document.removeEventListener('click', close);
       document.removeEventListener('touchstart', close);
+      document.removeEventListener('keydown', closeKey);
     }
   };
+  const closeKey = e => { if (e.key === 'Escape') { strip.remove(); document.removeEventListener('keydown', closeKey); } };
   setTimeout(() => {
     document.addEventListener('click', close);
-    document.addEventListener('touchstart', close);
+    document.addEventListener('touchstart', close, { passive: true });
+    document.addEventListener('keydown', closeKey);
   }, 60);
 }
 

@@ -126,13 +126,20 @@ const _instances = new Map();
 function _initDb(cfg) {
   if (_instances.has(cfg.name)) return _instances.get(cfg.name);
   if (typeof firebase === 'undefined') {
-    throw new Error('Firebase SDK not loaded. Ensure Firebase compat scripts are included before db-manager.js.');
+    throw new Error('Firebase SDK not loaded. Check that gstatic.com is reachable and no extension blocks it.');
+  }
+  // Validate config has real values (not placeholder strings)
+  const c = cfg.config || {};
+  if (!c.apiKey || c.apiKey.startsWith('YOUR_')) {
+    throw new Error(`Database "${cfg.name}" has placeholder credentials. Fill in real Firebase config values.`);
   }
   let app;
   try { app = firebase.app(cfg.name); }
-  catch { app = firebase.initializeApp(cfg.config, cfg.name); }
+  catch (e) {
+    try { app = firebase.initializeApp(cfg.config, cfg.name); }
+    catch (e2) { throw new Error(`Firebase initializeApp failed for "${cfg.name}": ${e2.message}`); }
+  }
   const fs = firebase.firestore(app);
-  // Persistence: silently ignore if already enabled or in private browsing
   fs.enablePersistence({ synchronizeTabs: true }).catch(() => {});
   _instances.set(cfg.name, fs);
   return fs;

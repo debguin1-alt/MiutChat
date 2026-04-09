@@ -191,7 +191,11 @@ html = html
   .replace(/[ \t]{2,}/g,' ')
   .replace(/>\s+</g,'><')
   .trim()+'\n';
+// Stamp version into HTML
+html = html.replace(/<meta name="application-version"[^>]*\/>/,
+  '<meta name="application-version" content="2.0.1"/>');
 fs.writeFileSync(DIST+'/index.html', html);
+log('  stamp', 'version 2.0.1 applied to index.html');
 
 log('STATIC', 'copy assets');
 const STATIC = [
