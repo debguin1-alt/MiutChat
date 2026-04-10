@@ -1455,8 +1455,12 @@ async function handleCreate() {
     const saltBytes = crypto.getRandomValues(new Uint8Array(16));
     const roomSalt  = _b64uEnc(saltBytes.buffer);
     _roomSalt = roomSalt;
+    // autoDeleteAt = 48h from now — Firebase TTL policy auto-deletes this doc
+    const _roomTTLms  = 48 * 60 * 60 * 1000;
+    const _autoDelete = firebase.firestore.Timestamp.fromMillis(Date.now() + _roomTTLms);
     await db.collection('rooms').doc(code).set({
       createdAt: ts_now(), creatorId: uid, epoch: 0, salt: roomSalt,
+      autoDeleteAt: _autoDelete,
     }, { merge: true });
     _roomEpoch = 0;
     state.me = await buildMe(resolveName()); state.roomCode = code;
@@ -1465,6 +1469,7 @@ async function handleCreate() {
     // Approval gate is always on — no choice presented
     await db.collection('rooms').doc(code).update({ approvalRequired: true }).catch(() => {});
     await sendSys(`${state.me.name} created this room`);
+    _ping('room_created');
     bootApp();
   } catch (e) { showSmartError(e, 'create'); }
   finally { setLoading(btn, false); }
@@ -2419,6 +2424,18 @@ function renderMembers(snap) {
     $('hamburger-btn')?.classList.remove('has-pending');
   }
 }
+/** _ping — anonymous event counter, fire-and-forget */
+function _ping(event) {
+  try {
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ e: event }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
+}
+
 // wipeRoom accepts an explicit Firestore instance to avoid using the global `db`
 // which may point to a different shard if getDb() was called for another room.
 async function wipeRoom(code, fsInstance) {
@@ -2535,6 +2552,7 @@ async function sendMessage() {
 
   db.collection('rooms').doc(state.roomCode).collection('messages').add(msgData)
     .then(() => {
+      _ping('message_sent');
       // Auto-rotate epoch every N messages (admin only, silent)
       if (_isAdmin) {
         _msgsSinceEpoch++;
@@ -2860,7 +2878,8 @@ async function renderMsg(data, docId) {
     if (data.encData) {
       const uid = 'med_' + (data.ts||Date.now()) + '_' + Math.random().toString(36).slice(2,5);
       bubble = buildMediaPlaceholder(uid, data);
-      setTimeout(() => decryptAndShow(data.encData, data.mime||'application/octet-stream', data.type, data.fileName, uid), 60);
+      // Lazy decrypt: only run when placeholder scrolls into view
+      _lazyDecrypt(uid, data);
     } else {
       bubble = `<div class="msg-media-err">Media unavailable</div>`;
     }
@@ -2978,6 +2997,46 @@ async function renderMsg(data, docId) {
   if (data.sig && data.type === 'text') {
     requestAnimationFrame(() => verifyAndBadge(data, docId));
   }
+}
+
+// ── Lazy decrypt via IntersectionObserver ──────────────────────────────────
+// Only decrypts media when the placeholder element enters the viewport.
+// Falls back to setTimeout on browsers without IntersectionObserver.
+const _lazyIO = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((entries, obs) => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        obs.unobserve(en.target);
+        const { encData, mime, type, fileName, uid } = en.target.dataset;
+        if (encData) decryptAndShow(encData, mime || 'application/octet-stream', type, fileName, uid);
+      });
+    }, { rootMargin: '200px' })   // start 200px before visible
+  : null;
+
+function _lazyDecrypt(uid, data) {
+  // Store data on the placeholder element as data-attributes (base64 is safe)
+  const _doDecrypt = () =>
+    decryptAndShow(data.encData, data.mime || 'application/octet-stream', data.type, data.fileName, uid);
+
+  if (!_lazyIO) {
+    setTimeout(_doDecrypt, 60);
+    return;
+  }
+  // Poll for element then observe it
+  let _tries = 0;
+  const _poll = setInterval(() => {
+    const el = document.getElementById(uid);
+    if (el) {
+      clearInterval(_poll);
+      el.dataset.encData   = data.encData || '';
+      el.dataset.mime      = data.mime    || '';
+      el.dataset.type      = data.type    || '';
+      el.dataset.fileName  = data.fileName|| '';
+      el.dataset.uid       = uid;
+      _lazyIO.observe(el);
+    }
+    if (++_tries > 20) { clearInterval(_poll); setTimeout(_doDecrypt, 60); }
+  }, 50);
 }
 
 function buildMediaPlaceholder(uid, data) {
@@ -3132,14 +3191,25 @@ function renderReactionsInto(container, reactions, docId) {
   const entries = Object.entries(reactions || {}).filter(([, u]) => Object.keys(u).length > 0);
   if (!entries.length) return;
   entries.forEach(([emoji, users]) => {
-    const count = Object.keys(users).length;
-    const hasMe = !!users[state.me?.id];
-    const btn = document.createElement('button');
+    const count  = Object.keys(users).length;
+    const hasMe  = !!users[state.me?.id];
+    const names  = Object.values(users).filter(Boolean).join(', ');
+    const btn    = document.createElement('button');
+    btn.type      = 'button';
     btn.className = 'reaction-chip' + (hasMe ? ' mine' : '');
-    btn.textContent = emoji;
-    const rcnt = document.createElement("span"); rcnt.className = "reaction-count"; rcnt.textContent = count; btn.appendChild(rcnt);
-    btn.title = Object.values(users).join(', ');
-    btn.addEventListener('click', e => { e.stopPropagation(); toggleReaction(docId, emoji); });
+    btn.title     = names || emoji;
+    // Emoji span — use system emoji font explicitly
+    const espan   = document.createElement('span');
+    espan.className   = 'reaction-emoji';
+    espan.textContent = emoji;
+    // Count span
+    const rcnt    = document.createElement('span');
+    rcnt.className    = 'reaction-count';
+    rcnt.textContent  = count;
+    btn.appendChild(espan);
+    btn.appendChild(rcnt);
+    btn.addEventListener('click',    e => { e.stopPropagation(); toggleReaction(docId, emoji); });
+    btn.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); toggleReaction(docId, emoji); }, { passive: false });
     container.appendChild(btn);
   });
 }

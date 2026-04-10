@@ -12,6 +12,8 @@ binding = "MIUT_BAN"
 id      = "60802b14aec24f83b4c47752f76c8c8e"
 
 [vars]
+FIREBASE_PROJECT_ID = "tuition-fee-management-4e15e"
+FIREBASE_API_KEY     = "AIzaSyCoPJjVzwaaZBgvz-P4vGJ44muNS51qqeg"
 MIUT_VERSION  = "1.0.0"
 MIUT_ENV      = "production"
 RL_CREATE_MAX = "2"
@@ -24,3 +26,6 @@ RL_SEND_WIN_S = "10"
 [[kv_namespaces]]
 binding = "MIUT_KV"
 id      = "f5973db3a599408ca5dbce63ed19487e"
+
+[triggers]
+crons = ["0 */6 * * *"]  # Run every 6 hours to clean up expired rooms

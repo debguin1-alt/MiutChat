@@ -72,6 +72,9 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 @keyframes nx-in{0%{opacity:0;transform:translateY(20px) scale(.94);filter:blur(6px)}55%{opacity:1;filter:blur(0)}100%{opacity:1;transform:none;filter:blur(0)}}
 .nx-anim{opacity:0}
 .screen.active .nx-anim{animation:nx-in .55s cubic-bezier(.22,1,.36,1) var(--nx-d,0s) both}
+/* Sidebar is outside .screen — its nx-anim children must always be visible */
+.sidebar .nx-anim{opacity:1;animation:none}
+.sidebar.open .nx-anim{animation:nx-in .38s cubic-bezier(.22,1,.36,1) var(--nx-d,0s) both}
 
 /* ── Ripple ───────────────────────────────────────── */
 #ripple-container{position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden}
@@ -337,7 +340,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .msg-inner{display:flex;flex-direction:column;min-width:0}
 .msg-wrapper.sent .msg-inner{align-items:flex-end}
 .msg-sender{font-family:var(--fui);font-size:.6rem;font-weight:700;letter-spacing:1.5px;margin-bottom:4px;padding-left:2px}
-.msg-bubble{padding:10px 14px;border-radius:20px;font-family:var(--fmono);font-size:.87rem;line-height:1.64;word-break:break-word;overflow-wrap:anywhere;letter-spacing:.1px;transition:box-shadow var(--fast) ease,border-color var(--fast) ease}
+.msg-bubble{padding:10px 14px;border-radius:20px;font-family:var(--fmono),"Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji";font-size:.87rem;line-height:1.64;word-break:break-word;overflow-wrap:anywhere;letter-spacing:.1px;transition:box-shadow var(--fast) ease,border-color var(--fast) ease}
 .msg-wrapper.sent .msg-bubble{background:linear-gradient(135deg,var(--teal) 0%,var(--teal2) 100%);color:var(--bg);border-bottom-right-radius:6px;box-shadow:0 2px 14px rgba(78,205,196,.22)}
 .msg-wrapper.sent.consecutive .msg-bubble{border-bottom-right-radius:20px}
 .msg-wrapper.received .msg-bubble{background:var(--surf2);color:var(--text);border:1px solid var(--border2);border-bottom-left-radius:6px}
@@ -366,10 +369,14 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .rq-media,.rq-media-inline{display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--teal);opacity:.9}
 .msg-wrapper.sent .rq-media,.msg-wrapper.sent .rq-media-inline{color:rgba(255,255,255,.80)}
 .msg-reactions{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-.reaction-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 6px;background:var(--bg3);border:1px solid var(--border);border-radius:100px;font-size:.82rem;cursor:pointer;line-height:1;transition:background var(--fast) ease,border-color var(--fast) ease,transform var(--fast) var(--spring)}
-.reaction-chip:hover{border-color:var(--teal);background:var(--teal-dim);transform:scale(1.09)}
-.reaction-chip:active{transform:scale(.88)}
-.reaction-chip.mine{border-color:var(--teal);background:var(--teal-dim)}
+.reaction-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px 3px 6px;background:var(--bg3);border:1px solid var(--border);border-radius:100px;font-size:.8rem;cursor:pointer;line-height:1.2;transition:background var(--fast) ease,border-color var(--fast) ease,transform var(--fast) var(--spring);-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.reaction-chip:hover{border-color:var(--teal);background:var(--teal-dim);transform:scale(1.08)}
+.reaction-chip:active{transform:scale(.9)}
+.reaction-chip.mine{border-color:var(--teal-b);background:var(--teal-dim)}
+/* Force emoji font — prevents monospace font overriding system emoji glyphs */
+.reaction-emoji{font-family:"Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif;font-size:1rem;line-height:1;display:inline-block}
+/* Also fix emoji in the quick-react strip and grid */
+.strip-emoji,.strip-emoji-grid-btn{font-family:"Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif!important}
 .reaction-count{font-family:var(--fui);font-size:.6rem;font-weight:700;color:var(--text2);min-width:10px}
 .reaction-chip.mine .reaction-count{color:var(--teal)}
 .msg-actions{display:flex;flex-direction:column;gap:4px;opacity:0;flex-shrink:0;margin:0 4px;transition:opacity var(--fast) ease}
@@ -407,9 +414,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .strip-emoji-grid-btn:hover{background:var(--teal-dim);transform:scale(1.2) translateY(-1px)}
 .strip-emoji-grid-btn:active{transform:scale(1.0)}
 /* Reaction chips below messages */
-.reaction-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:100px;font-size:.84rem;border:1px solid var(--border2);background:var(--surf);cursor:pointer;transition:border-color .12s,background .12s;line-height:1.4;-webkit-tap-highlight-color:transparent}
-.reaction-chip.mine{border-color:var(--teal-b);background:var(--teal-dim)}
-.reaction-chip:hover{border-color:var(--teal-b);background:var(--teal-dim)}
+/* reaction-chip rules consolidated above */
 .strip-divider{height:1px;background:var(--border);margin:2px 6px 4px}
 .strip-actions{display:flex;gap:2px;padding:0 0 2px}
 .strip-action{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;padding:10px 6px 8px;border-radius:14px;font-family:var(--fui);font-size:.59rem;font-weight:600;letter-spacing:.5px;color:var(--text);transition:background .1s ease,color .1s ease,transform .12s var(--spring)}
@@ -651,3 +656,9 @@ button:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-rad
 @media print{[data-sensitive="1"]{filter:blur(12px);user-select:none}.msg-bubble{background:#000!important;color:#000!important}}
 .msg-wrapper[data-expiring]{animation:expiry-p 1s ease infinite}
 @keyframes expiry-p{0%,100%{opacity:1}50%{opacity:.42}}
+
+/* ── Lazy loading skeleton ───────────────────────────────────────── */
+.msg-media.loading{min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--surf);border-radius:14px;border:1px solid var(--border);padding:16px}
+.media-decrypt-spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .9s linear infinite}
+.media-decrypt-label{font-size:.64rem;color:var(--text2);letter-spacing:.5px}
+@keyframes spin{to{transform:rotate(360deg)}}
