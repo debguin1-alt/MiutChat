@@ -863,7 +863,7 @@ const _ERROR_MAP = {
   'network-request-failed':   { title: 'No internet connection', detail: 'You appear to be offline.',                     icon: '📶', type: 'network'     },
   'deadline-exceeded':        { title: 'Request timed out',      detail: 'Server took too long — try again.',             icon: '⏱',  type: 'network'     },
   'resource-exhausted':       { title: 'Server busy',            detail: 'Quota exceeded. Try again in a few minutes.',   icon: '⚠',  type: 'quota'       },
-  'permission-denied':        { title: 'Access denied',          detail: "You don't have permission for this action.",   icon: '🔒', type: 'permission'  },
+  'permission-denied':        { title: 'Access denied',          detail: 'Room not found or you are not signed in. Try refreshing the page.',   icon: '🔒', type: 'permission'  },
   'unauthenticated':          { title: 'Not signed in',          detail: 'Reload the page and try again.',                icon: '🔑', type: 'auth'        },
   'not-found':                { title: 'Room not found',         detail: 'The room may have been closed.',                icon: '🔍', type: 'notfound'    },
   'already-exists':           { title: 'Already exists',         detail: 'A room with this code already exists.',         icon: '♻',  type: 'notfound'    },
@@ -1180,6 +1180,9 @@ function loadRoom()    { return localStorage.getItem(CONFIG.ROOM_KEY); }
 window.addEventListener('DOMContentLoaded', () => {
   _wireAllHandlers();
   _wireEntropyListeners();
+  // Warm up Anonymous Auth immediately so it's ready when user clicks Enter/Create.
+  // Avoids the first-click permission-denied delay.
+  getUID().catch(() => {});
   // ── Rotating placeholder text (CSP-safe, moved from inline HTML script) ──
   (function initRotatingPlaceholders() {
     function rotatePlaceholder(input) {
@@ -1463,9 +1466,9 @@ async function handleEnter() {
   const btn = $('btn-enter');
   setLoading(btn, true, 'Connecting…');
   try {
-    // Route to the correct database shard for this room before any query.
-    // Without this, handleEnter would query whichever shard `db` defaulted to,
-    // which is always db0. Rooms created on db1/db2 would never be found.
+    // Authenticate FIRST — Firestore rules require request.auth != null.
+    // Without this, every read returns permission-denied regardless of room existence.
+    const uid = await getUID();
     db = await getDb(code);
     const roomSnap = await db.collection('rooms').doc(code).get();
     if (!roomSnap.exists) {
@@ -1476,7 +1479,6 @@ async function handleEnter() {
     _roomEpoch = roomSnap.data()?.epoch || 0;
     _roomSalt  = roomSnap.data()?.salt  || null;
 
-    const uid         = await getUID();
     const memberSnap  = await db.collection('rooms').doc(code).collection('members').doc(uid).get();
     const prevData    = memberSnap.exists ? memberSnap.data() : null;
     const wasApproved = prevData?.approved === true;
@@ -3668,6 +3670,8 @@ async function joinFromInvite() {
   if (btn) { btn.disabled = true; const sp = btn.querySelector('span'); if (sp) sp.textContent = 'Joining…'; }
 
   try {
+    // Auth before read — required by Firestore security rules
+    const uid = await getUID();
     db = await getDb(code);
     const roomSnap = await db.collection('rooms').doc(code).get();
     if (!roomSnap.exists) {
@@ -3679,7 +3683,6 @@ async function joinFromInvite() {
     _saveWrongState({ wrongCount: 0, lockedUntil: 0 });
     _roomEpoch = roomSnap.data()?.epoch || 0;
     _roomSalt  = roomSnap.data()?.salt  || null;
-    const uid        = await getUID();
     const memberSnap = await db.collection('rooms').doc(code).collection('members').doc(uid).get();
     const prevData   = memberSnap.exists ? memberSnap.data() : null;
     const wasApproved = prevData?.approved === true;
