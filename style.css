@@ -204,7 +204,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 
 /* ── App shell ────────────────────────────────────── */
 #app{flex-direction:row}
-.sidebar{width:var(--sw);flex-shrink:0;background:#0e1a19;border-right:1px solid var(--border);backdrop-filter:none;display:flex;flex-direction:column;height:100%;z-index:20;transition:transform .28s var(--inout),box-shadow .28s ease;will-change:transform}
+.sidebar{width:var(--sw);flex-shrink:0;background:#0e1a19;border-right:1px solid var(--border);backdrop-filter:none;display:flex;flex-direction:column;z-index:20;transition:transform .3s cubic-bezier(.4,0,.2,1),box-shadow .3s ease;will-change:transform}
 .sidebar-header{display:flex;align-items:center;gap:8px;padding:0 12px 0 16px;height:var(--hh);flex-shrink:0;border-bottom:1px solid var(--border)}
 .sidebar-title-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;justify-content:center}
 .app-name{font-family:var(--fui);font-size:.86rem;font-weight:800;letter-spacing:5px;color:#fff;line-height:1}
@@ -265,10 +265,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .btn-logout{width:100%;padding:10px 14px;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--text2);font-family:var(--fui);font-size:.67rem;font-weight:600;letter-spacing:2px;transition:border-color var(--fast) ease,color var(--fast) ease,background var(--fast) ease,transform var(--fast) var(--spring)}
 .btn-logout:hover{border-color:var(--danger);color:var(--danger);background:var(--d-dim)}
 .btn-logout:active{transform:scale(.97)}
-/* Overlay: z-index 18 (BELOW sidebar z-index:20).
-   When sidebar.open is z-index:20, taps on the sidebar go to the sidebar.
-   Taps on the dark area to the right go to the overlay (z-index:18 > main content).
-   This is the classic CSS drawer pattern — no JS event tricks needed. */
+/* Sidebar is a direct <body> child — not inside #app stacking context.
+   Overlay z-index:30, sidebar z-index:31. Pure CSS z-index works correctly. */
 #sidebar-overlay{
   position:fixed;inset:0;
   background:rgba(0,0,0,.65);
@@ -546,6 +544,11 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 
 /* ── Toasts ───────────────────────────────────────── */
 .toast-container{position:fixed;bottom:26px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:200;pointer-events:none;max-width:320px}
+.toast-icon{width:28px;height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--teal-dim);border:1px solid var(--teal-b)}
+.toast-icon svg{display:block}
+.err-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;background:var(--d-dim);border:1px solid rgba(255,95,95,.2);margin-right:6px;flex-shrink:0;vertical-align:middle}
+.err-icon svg{display:block}
+.error-msg{display:flex;align-items:flex-start;gap:4px}
 .toast{background:var(--glass2);border:1px solid var(--border);border-radius:18px;padding:13px 16px;display:flex;align-items:flex-start;gap:12px;pointer-events:all;cursor:pointer;position:relative;overflow:hidden;box-shadow:var(--sh-lg);animation:toast-in .34s cubic-bezier(.22,1,.36,1) both;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px)}
 @keyframes toast-in{from{opacity:0;transform:translateX(36px) scale(.88);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
 .toast.removing{animation:toast-out .26s ease forwards}
@@ -597,11 +600,23 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 /* ── Responsive ───────────────────────────────────── */
 @media (min-width:641px){
   .hamburger-btn{display:none!important}
-  /* Desktop: always-visible sidebar, no transform, no overlay */
-  .sidebar{position:relative!important;transform:none!important;pointer-events:all!important;z-index:10!important;box-shadow:none!important;background:#0e1a19!important}
+  /* Desktop: sidebar is fixed on the left, always visible.
+     main-area gets padding-left equal to sidebar width. */
+  .sidebar{
+    position:fixed!important;
+    top:0!important;bottom:0!important;left:0!important;
+    width:var(--sw)!important;
+    transform:none!important;
+    pointer-events:all!important;
+    z-index:10!important;
+    box-shadow:none!important;
+    background:#0e1a19!important;
+    border-right:1px solid var(--border)!important;
+  }
+  .main-area{padding-left:0}
+  #app{padding-left:var(--sw)}
   #sidebar-overlay{display:none!important;pointer-events:none!important}
   #sidebar-tap-close{display:none!important}
-  body.sidebar-active{overflow:auto}
 }
 @media (max-width:640px){
   .hamburger-btn{display:flex!important}

@@ -859,32 +859,32 @@ function _wireEntropyListeners() {
 // type: 'network' | 'auth' | 'quota' | 'permission' | 'notfound' | 'unknown'
 const _ERROR_MAP = {
   // ── Firestore errors ──────────────────────────────────────────────────────
-  'unavailable':              { title: 'Server unreachable',     detail: 'Check your connection and try again.',           icon: '📡', type: 'network'     },
+  'unavailable':              { title: 'Server unreachable',     detail: 'Check your connection and try again.',           icon: 'net', type: 'network'     },
   'network-request-failed':   { title: 'No internet connection', detail: 'You appear to be offline.',                     icon: '📶', type: 'network'     },
-  'deadline-exceeded':        { title: 'Request timed out',      detail: 'Server took too long — try again.',             icon: '⏱',  type: 'network'     },
-  'resource-exhausted':       { title: 'Server busy',            detail: 'Quota exceeded. Try again in a few minutes.',   icon: '⚠',  type: 'quota'       },
-  'permission-denied':        { title: 'Access denied',          detail: 'Room not found or you are not signed in. Try refreshing the page.',   icon: '🔒', type: 'permission'  },
-  'unauthenticated':          { title: 'Not signed in',          detail: 'Reload the page and try again.',                icon: '🔑', type: 'auth'        },
+  'deadline-exceeded':        { title: 'Request timed out',      detail: 'Server took too long — try again.',             icon: 'clock',  type: 'network'     },
+  'resource-exhausted':       { title: 'Server busy',            detail: 'Quota exceeded. Try again in a few minutes.',   icon: 'warn',  type: 'quota'       },
+  'permission-denied':        { title: 'Access denied',          detail: 'Room not found or you are not signed in. Try refreshing the page.',   icon: 'lock', type: 'permission'  },
+  'unauthenticated':          { title: 'Not signed in',          detail: 'Reload the page and try again.',                icon: 'key', type: 'auth'        },
   'not-found':                { title: 'Room not found',         detail: 'The room may have been closed.',                icon: '🔍', type: 'notfound'    },
   'already-exists':           { title: 'Already exists',         detail: 'A room with this code already exists.',         icon: '♻',  type: 'notfound'    },
-  'cancelled':                { title: 'Operation cancelled',    detail: 'The request was cancelled — try again.',        icon: '✗',  type: 'unknown'     },
+  'cancelled':                { title: 'Operation cancelled',    detail: 'The request was cancelled — try again.',        icon: 'err',  type: 'unknown'     },
   'internal':                 { title: 'Server error',           detail: 'An internal error occurred. Try again.',        icon: '⚡', type: 'unknown'     },
-  'DB probe timeout':         { title: 'Connection timeout',     detail: 'Database took too long to respond.',            icon: '⏱',  type: 'network'     },
+  'DB probe timeout':         { title: 'Connection timeout',     detail: 'Database took too long to respond.',            icon: 'clock',  type: 'network'     },
   // ── Firebase Auth errors ──────────────────────────────────────────────────
-  'auth/operation-not-allowed':    { title: 'Anonymous auth disabled',  detail: 'Enable Anonymous Auth in Firebase Console → Authentication → Sign-in method.', icon: '🔧', type: 'auth' },
+  'auth/operation-not-allowed':    { title: 'Anonymous auth disabled',  detail: 'Enable Anonymous Auth in Firebase Console → Authentication → Sign-in method.', icon: 'warn', type: 'auth' },
   'auth/network-request-failed':   { title: 'No internet',              detail: 'Cannot reach authentication servers.',          icon: '📶', type: 'network' },
   'auth/too-many-requests':        { title: 'Too many attempts',        detail: 'Wait a moment before trying again.',            icon: '⛔', type: 'quota'   },
-  'auth/invalid-api-key':          { title: 'Firebase config error',    detail: 'Firebase API key is missing or invalid. Check db-manager.js config.', icon: '🔑', type: 'auth' },
+  'auth/invalid-api-key':          { title: 'Firebase config error',    detail: 'Firebase API key is missing or invalid. Check db-manager.js config.', icon: 'key', type: 'auth' },
   'auth/app-not-authorized':       { title: 'Domain not authorized',    detail: 'Add this domain to Firebase Console → Authentication → Settings → Authorized domains.', icon: '🌐', type: 'auth' },
   'auth/unauthorized-domain':      { title: 'Domain not authorized',    detail: 'Add this domain to Firebase Console → Authentication → Settings → Authorized domains.', icon: '🌐', type: 'auth' },
-  'auth/invalid-app-id':           { title: 'Firebase config error',    detail: 'Invalid Firebase App ID in db-manager.js.',     icon: '🔑', type: 'auth' },
-  'auth/app-deleted':              { title: 'Firebase project deleted',  detail: 'The Firebase project no longer exists.',        icon: '🗑', type: 'auth' },
+  'auth/invalid-app-id':           { title: 'Firebase config error',    detail: 'Invalid Firebase App ID in db-manager.js.',     icon: 'key', type: 'auth' },
+  'auth/app-deleted':              { title: 'Firebase project deleted',  detail: 'The Firebase project no longer exists.',        icon: 'trash', type: 'auth' },
   'auth/cors-unsupported':         { title: 'Browser not supported',    detail: 'Try a different browser.',                      icon: '🌐', type: 'auth' },
   'auth/web-storage-unsupported':  { title: 'Storage disabled',         detail: 'Enable cookies and local storage in your browser settings.', icon: '🍪', type: 'auth' },
-  'auth/auth-domain-config-required': { title: 'Firebase config error', detail: 'authDomain is missing from Firebase config.',   icon: '🔑', type: 'auth' },
-  'appCheck/token-error':             { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: '🛡', type: 'auth' },
-  'app-check/token-error':            { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: '🛡', type: 'auth' },
-  'app check token':                  { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: '🛡', type: 'auth' },
+  'auth/auth-domain-config-required': { title: 'Firebase config error', detail: 'authDomain is missing from Firebase config.',   icon: 'key', type: 'auth' },
+  'appCheck/token-error':             { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: 'shield', type: 'auth' },
+  'app-check/token-error':            { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: 'shield', type: 'auth' },
+  'app check token':                  { title: 'App Check not configured', detail: 'Add your reCAPTCHA v3 site key to db-manager.js and register it in Firebase Console → App Check.', icon: 'shield', type: 'auth' },
   'no-app':                        { title: 'Firebase not initialised',  detail: 'Firebase app failed to start. Reload the page.', icon: '🔥', type: 'auth' },
   'load failed':                   { title: 'No internet connection',   detail: 'Check your connection and try again.',           icon: '📶', type: 'network' },
 };
@@ -895,7 +895,7 @@ const _ERROR_MAP = {
  * Always returns something human-readable — never exposes raw SDK messages.
  */
 function _classifyError(e) {
-  if (!e) return { title: 'Something went wrong', detail: 'Try again.', icon: '⚠', type: 'unknown' };
+  if (!e) return { title: 'Something went wrong', detail: 'Try again.', icon: 'warn', type: 'unknown' };
 
   // Firebase SDK errors have e.code like 'firestore/unavailable'
   const raw  = (e?.code || e?.message || String(e)).toLowerCase();
@@ -910,15 +910,15 @@ function _classifyError(e) {
   if (raw.includes('offline') || raw.includes('network') || raw.includes('fetch'))
     return { title: 'No internet connection', detail: 'You appear to be offline.', icon: '📶', type: 'network' };
   if (raw.includes('timeout') || raw.includes('deadline'))
-    return { title: 'Request timed out', detail: 'Try again.', icon: '⏱', type: 'network' };
+    return { title: 'Request timed out', detail: 'Try again.', icon: 'clock', type: 'network' };
   if (raw.includes('quota') || raw.includes('resource'))
-    return { title: 'Server busy', detail: 'Try again in a few minutes.', icon: '⚠', type: 'quota' };
+    return { title: 'Server busy', detail: 'Try again in a few minutes.', icon: 'warn', type: 'quota' };
   if (raw.includes('permission') || raw.includes('forbidden') || raw.includes('unauthorized'))
-    return { title: 'Access denied', detail: "You don't have permission.", icon: '🔒', type: 'permission' };
+    return { title: 'Access denied', detail: "You don't have permission.", icon: 'lock', type: 'permission' };
 
   // Show the raw error code so users can report exactly what went wrong
   const hint = e?.code ? ' [' + e.code + ']' : (e?.message ? ' [' + String(e.message).slice(0, 60) + ']' : '');
-  return { title: 'Connection error', detail: 'Check your connection and try again.' + hint, icon: '📡', type: 'unknown' };
+  return { title: 'Connection error', detail: 'Check your connection and try again.' + hint, icon: 'net', type: 'unknown' };
 }
 
 // ─── Persistent Rate Limiter ─────────────────────────────────────────────────
@@ -1072,7 +1072,7 @@ function checkSendRateLimit() {
   const now = Date.now();
   if (now > _sendRl.resetAt) { _sendRl.count = 0; _sendRl.resetAt = now + 10000; }
   _sendRl.count++;
-  if (_sendRl.count > 20) { toast('Slow down', 'Too many messages sent too quickly.', '⚠'); return false; }
+  if (_sendRl.count > 20) { toast('Slow down', 'Too many messages sent too quickly.', 'warn'); return false; }
   return true;
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1257,6 +1257,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // Sidebar setup
   setupSidebar();
   setupActionBtn();
+  // Hide sidebar until app screen is shown (sidebar is now a body-level element)
+  const _initSb = $('sidebar');
+  if (_initSb) _initSb.style.display = 'none';
   setupClipboardPaste();
 
   // Restore saved name
@@ -1319,6 +1322,16 @@ function hideSplash() { $('splash')?.classList.remove('active'); }
 function showScreen(id) {
   const next = $(id);
   if (!next) return;
+  // Sidebar visibility — sidebar is a body-level element, only show in app
+  const sidebarEl = $('sidebar');
+  if (sidebarEl) {
+    if (id === 'app') {
+      sidebarEl.style.display = '';
+    } else {
+      sidebarEl.style.display = 'none';
+      closeSidebar();
+    }
+  }
   // Morph-exit the currently active screen
   document.querySelectorAll('.screen.active').forEach(s => {
     if (s.id === id) return;
@@ -1625,7 +1638,7 @@ function bootApp() {
   startRoomListener();
   startHeartbeat();
   initScrollFab();
-  toast('Joined room · ' + state.roomCode, 'Share this code to invite others', '✓');
+  toast('Joined room · ' + state.roomCode, 'Share this code to invite others', 'ok');
 }
 
 async function checkApprovalAndBoot() {
@@ -1741,8 +1754,8 @@ async function approveUser(uid, name) {
       .collection('members').doc(uid)
       .update({ approved: true });
     // Don't send system message here — the newly approved user sends it on their side (bootApp)
-    toast(`${name} approved ✓`, 'They can now read and send messages.', '✓');
-  } catch(e) { toast('Approval failed', e.message, '✗'); }
+    toast(`${name} approved ✓`, 'They can now read and send messages.', 'ok');
+  } catch(e) { toast('Approval failed', e.message, 'err'); }
 }
 
 async function declineUser(uid, name) {
@@ -1753,8 +1766,8 @@ async function declineUser(uid, name) {
     await db.collection('rooms').doc(state.roomCode)
       .collection('members').doc(uid)
       .update({ online: false, declined: true });
-    toast(`${name} was declined`, '', '✗');
-  } catch(e) { toast('Decline failed', e.message, '✗'); }
+    toast(`${name} was declined`, '', 'err');
+  } catch(e) { toast('Decline failed', e.message, 'err'); }
 }
 
 async function promoteToAdmin(uid, name) {
@@ -1769,9 +1782,9 @@ async function promoteToAdmin(uid, name) {
     await db.collection('rooms').doc(state.roomCode)
       .collection('members').doc(uid)
       .update({ role: 'admin' });
-    await sendSys(`${name} was promoted to admin ◆`);
-    toast(`${name} is now Admin`, '', '◆');
-  } catch(e) { toast('Promotion failed', e.message, '✗'); }
+    await sendSys(`${name} was promoted to admin`);
+    toast(`${name} is now Admin`, '', 'star');
+  } catch(e) { toast('Promotion failed', e.message, 'err'); }
 }
 
 function updateAdminBadge() {
@@ -1790,7 +1803,7 @@ function startRoomListener() {
       const newEpoch = d.epoch || 0;
       if (newEpoch > _roomEpoch) {
         _roomEpoch = newEpoch;
-        toast('Encryption key rotated', `Epoch ${newEpoch} — new messages use a fresh key`, '🔑');
+        toast('Encryption key rotated', `Epoch ${newEpoch} — new messages use a fresh key`, 'key');
       }
       // Message TTL — 0 = off, otherwise milliseconds
       const newTtl = (d.msgTtlMs || 0);
@@ -1853,7 +1866,7 @@ async function _registerCanary(docId, enc) {
 // ─── Security lockdown ────────────────────────────────────────────────────────
 function _triggerSecurityLockdown(reason) {
   console.error('[MIUT Security] Lockdown triggered:', reason);
-  toast('Security alert', 'Suspicious activity detected — connection closed.', '🚨');
+  toast('Security alert', 'Suspicious activity detected — connection closed.', 'alert');
   setTimeout(() => {
     // Clear all state, stop all listeners, return to join screen
     if (typeof handleLogout === 'function') handleLogout();
@@ -1916,9 +1929,9 @@ async function setRoomTtl(ms) {
     toast(
       ms ? `Messages expire after ${_fmtTtl(ms)}` : 'Message expiry off',
       ms ? 'Old messages will fade from view automatically.' : 'Messages stay until the room closes.',
-      ms ? '⏱' : '∞'
+      ms ? 'clock' : '∞'
     );
-  } catch (e) { toast('Failed to set expiry', e.message, '✗'); }
+  } catch (e) { toast('Failed to set expiry', e.message, 'err'); }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1929,7 +1942,7 @@ async function _autoRotateEpoch(reason) {
     await db.collection('rooms').doc(state.roomCode).update({ epoch: newEpoch });
     _roomEpoch = newEpoch;
     _msgsSinceEpoch = 0;
-    await sendSys(`🔑 Key auto-rotated (${reason}) — epoch ${newEpoch} active`);
+    await sendSys(`Key auto-rotated 🔑 (${reason}) — epoch ${newEpoch} active`);
   } catch { /* silent — non-critical */ }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1946,9 +1959,9 @@ async function rotateKey() {
   try {
     await db.collection('rooms').doc(state.roomCode).update({ epoch: newEpoch });
     _roomEpoch = newEpoch;
-    await sendSys(`🔑 The encryption key was rotated — epoch ${newEpoch} is now active`);
-    toast('Key rotated', `Epoch ${newEpoch} now active`, '🔑');
-  } catch(e) { toast('Rotation failed', e.message, '✗'); }
+    await sendSys(`Encryption key rotated — epoch ${newEpoch} is now active`);
+    toast('Key rotated', `Epoch ${newEpoch} now active`, 'key');
+  } catch(e) { toast('Rotation failed', e.message, 'err'); }
 }
 async function loadCachedMessages() {
   const code = state.roomCode;
@@ -2102,7 +2115,7 @@ function startPresenceListener() {
             const d = ch.doc.data();
             if (!d.approved && ch.doc.id !== state.me?.id) {
               playSound('receive');
-              toast(`${d.name || 'Someone'} wants to join`, 'Open the sidebar to approve them', '👤');
+              toast(`${d.name || 'Someone'} wants to join`, 'Open the sidebar to approve them', 'user');
             }
           }
           // Auto-rotate key when an approved member goes offline (forward secrecy)
@@ -2143,16 +2156,28 @@ function startPresenceListener() {
             // to set emptyAt wins; if it's already set by another tab, skip the wipe.
             const roomRef = db.collection('rooms').doc(code);
             let shouldWipe = false;
-            await db.runTransaction(async tx => {
-              const roomSnap = await tx.get(roomRef);
-              if (!roomSnap.exists) { shouldWipe = false; return; }
-              if (roomSnap.data()?.emptyAt) { shouldWipe = false; return; } // another tab won
-              tx.update(roomRef, { emptyAt: ts_now() });
-              shouldWipe = true;
-            });
+            try {
+              await db.runTransaction(async tx => {
+                const txSnap = await tx.get(roomRef);
+                if (!txSnap.exists) return;
+                if (txSnap.data()?.emptyAt) return; // another tab already won
+                tx.update(roomRef, { emptyAt: ts_now() });
+                shouldWipe = true;
+              });
+            } catch (_txErr) {
+              // Transaction denied (non-admin member) — try direct update.
+              // Firestore rules allow creatorId to set emptyAt without admin doc.
+              try {
+                const freshSnap = await roomRef.get();
+                if (freshSnap.exists && !freshSnap.data()?.emptyAt) {
+                  await roomRef.update({ emptyAt: ts_now() });
+                  shouldWipe = true;
+                }
+              } catch (_e2) { /* fail open */ }
+            }
             if (shouldWipe) {
-              toast('Room closed', 'Last member left — room data wiped.', '🗑');
-              await wipeRoom(code, db); // pass current db instance explicitly
+              toast('Room closed', 'Last member left — room data wiped.', 'trash');
+              await wipeRoom(code, db);
               await clearCacheForRoom(code);
             }
           }
@@ -2295,7 +2320,7 @@ function renderMembers(snap) {
     if (doc.id === state.me?.id && m.role === 'admin' && !_isAdmin) {
       _isAdmin = true; state.me.role = 'admin'; saveSession();
       updateAdminBadge();
-      toast('You are now an admin ◆', 'You can approve new members.', '◆');
+      toast('You are now an admin ◆', 'You can approve new members.', 'star');
     }
 
     if (m.approved) approved.push({ uid: doc.id, ...m });
@@ -2479,7 +2504,7 @@ async function sendMessage() {
 
   // PART 8: replay protection — timestamp validation
   if (typeof validateMessageTimestamp === 'function' && !validateMessageTimestamp(ts_client)) {
-    toast('Send error', 'System clock skew detected — please check your device time.', '⚠'); return;
+    toast('Send error', 'System clock skew detected — please check your device time.', 'warn'); return;
   }
 
   const encText   = await enc(_sendText, state.roomCode);
@@ -2518,7 +2543,7 @@ async function sendMessage() {
         }
       }
     })
-    .catch(e => { toast('Send failed', e.message, '✗'); });
+    .catch(e => { toast('Send failed', e.message, 'err'); });
   playSound('send');
 }
 async function sendSys(text) {
@@ -2589,7 +2614,7 @@ function _renderReadBadge(wrapEl, readBy) {
   const senderId = wrapEl.dataset.senderId || '';
   const allReaders = Object.keys(readBy || {}).filter(uid => uid !== senderId);
   if (allReaders.length === 0) {
-    statusEl.textContent = '✓';
+    statusEl.textContent = 'ok';
     statusEl.title = 'Sent';
     statusEl.classList.remove('msg-status-read');
   } else {
@@ -2652,14 +2677,14 @@ async function handleFileAttach(e) {
   updateActionBtn();
 
   if (file.size > CONFIG.MAX_FILE_BYTES) {
-    toast('File too large', 'Max 25 MB per file', '✗'); return;
+    toast('File too large', 'Max 25 MB per file', 'err'); return;
   }
 
   const isImg   = file.type.startsWith('image/');
   const isVid   = file.type.startsWith('video/');
   const msgType = isImg ? 'image' : isVid ? 'video' : 'file';
 
-  toast('Encrypting…', file.name, '◈');
+  toast('Encrypting…', file.name, 'dot');
 
   try {
     const encrypted = await encBytes(file, state.roomCode);
@@ -2695,9 +2720,9 @@ async function handleFileAttach(e) {
       }
     }
     playSound('send');
-    toast('Sent!', file.name, '✓');
+    toast('Sent!', file.name, 'ok');
   } catch (err) {
-    toast('Upload failed', err.message || 'Check your connection', '✗');
+    toast('Upload failed', err.message || 'Check your connection', 'err');
   }
 }
 
@@ -2765,7 +2790,7 @@ function _readStatusBadge(data) {
     const hasRead = allReaders.length > 0;
     const cls   = hasRead ? ' msg-status-read' : '';
     const title = hasRead ? `Read by ${allReaders.length} member${allReaders.length !== 1 ? 's' : ''}` : 'Sent';
-    const tick  = hasRead ? '✓✓' : '✓';
+    const tick  = hasRead ? '✓✓' : 'ok';
     return `<span class="msg-status${cls}" title="${title}">${tick}</span>`;
   } catch { return '<span class="msg-status">✓</span>'; }
 }
@@ -3053,14 +3078,14 @@ async function confirmDeleteMsg(docId, wrapEl) {
     _renderedIds.delete(docId);
   } catch (e) {
 
-    toast('Delete failed', e.message, '✗');
+    toast('Delete failed', e.message, 'err');
   }
 }
 
 function scrollToMsg(docId) {
   if (!docId) return;
   const el = document.querySelector(`.msg-wrapper[data-doc-id="${CSS.escape(docId)}"]`);
-  if (!el) { toast('Message not in view', 'Scroll up to find it.', '↑'); return; }
+  if (!el) { toast('Message not in view', 'Scroll up to find it.', 'up'); return; }
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   el.classList.add('msg-highlight');
   setTimeout(() => el.classList.remove('msg-highlight'), 2000);
@@ -3342,7 +3367,7 @@ function startEdit(docId, currentText, wrapEl, msgTs) {
     if (remaining <= 0) {
       clearInterval(_editTimer); _editTimer = null;
       if (el) el.textContent = '';
-      toast('Edit window closed', 'The 2-minute edit window has passed.', '⏱');
+      toast('Edit window closed', 'The 2-minute edit window has passed.', 'clock');
       cancelEdit();
       return;
     }
@@ -3373,7 +3398,7 @@ async function submitEdit() {
   // The client check below is a UX guard only — it cannot be relied on for security.
   const age = Date.now() - _editingTs;
   if (_editingTs > 0 && age > CONFIG.EDIT_WINDOW_MS + 5000) {
-    toast('Edit window closed', 'The 2-minute edit window has passed.', '⏱');
+    toast('Edit window closed', 'The 2-minute edit window has passed.', 'clock');
     cancelEdit(); return;
   }
 
@@ -3386,7 +3411,7 @@ async function submitEdit() {
     await db.collection('rooms').doc(state.roomCode).collection('messages').doc(docId).update({
       enc: _eenc, edited: true, editedAt: ts_now(), sig: _esig, ts: _ets,
     });
-  } catch(e) { toast('Edit failed', e.message, '✗'); }
+  } catch(e) { toast('Edit failed', e.message, 'err'); }
 }
 
 function handleMentionInput(input) {
@@ -3603,7 +3628,7 @@ function closeMediaViewer() {
 
 function copyRoomCode() {
   if (!state.roomCode) return;
-  const code = state.roomCode, cb = () => toast('Code copied!', code, '✓');
+  const code = state.roomCode, cb = () => toast('Code copied!', code, 'ok');
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(code).then(cb).catch(() => fbCopy(code, cb));
   else fbCopy(code, cb);
 }
@@ -3622,7 +3647,7 @@ function shareRoomLink() {
     }).catch(() => {});
     return;
   }
-  const cb = () => toast('Invite link copied!', 'Send the link + room code separately for security', '🔗');
+  const cb = () => toast('Invite link copied!', 'Send the link + room code separately for security', 'link');
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(cb).catch(() => fbCopy(url, cb));
   else fbCopy(url, cb);
 }
@@ -3848,7 +3873,7 @@ function closeModal(e)   { if (e.target.classList.contains('modal-overlay')) clo
 
 function saveSettings() {
   localStorage.setItem(CONFIG.PREFS_KEY, JSON.stringify(state.prefs));
-  toast('Settings saved', '', '✓'); closeSettings();
+  toast('Settings saved', '', 'ok'); closeSettings();
 }
 
 function toggleSoundAlerts()   { state.prefs.sound         = $('sound-toggle').checked; }
@@ -3862,7 +3887,7 @@ function toggleApprovalGate() {
     .then(() => toast(
       on ? 'Approval gate ON' : 'Approval gate OFF',
       on ? 'New members must be approved' : 'Anyone with the code can join freely',
-      on ? '🔒' : '🔓'
+      on ? 'lock' : '🔓'
     ))
     .catch(() => {});
 }
@@ -3902,7 +3927,17 @@ function showError(msg, type) {
 
 function showSmartError(e, context) {
   const { title, detail, icon, type } = _classifyError(e);
-  showError(icon + ' ' + title + ' — ' + detail, type);
+  // Build error with SVG icon in a span
+  const _errSvg = _toastIcon(icon);
+  const errEl2 = $('join-error');
+  if (errEl2) {
+    errEl2.innerHTML = `<span class="err-icon">${_errSvg}</span>${esc(title + ' — ' + detail)}`;
+    errEl2.className = 'error-msg' + (type ? ' error-' + type : '');
+    errEl2.style.animation = 'none';
+    requestAnimationFrame(() => { errEl2.style.animation = 'shake .3s ease'; });
+    return;
+  }
+  showError(title + ' — ' + detail, type);
   // For network errors, inject a Retry button below the error message
   if (type === 'network' || type === 'auth') {
     const errEl = $('join-error');
@@ -4002,11 +4037,34 @@ function playSound(type) {
   } catch {}
 }
 
-function toast(title, msg, icon='◈') {
+// SVG icon map for toast notifications
+const _TOAST_ICONS = {
+  'ok':    '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M3 8l3.5 3.5 6.5-7" stroke="#4ecdc4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'err':   '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8" stroke="#ff5f5f" stroke-width="2" stroke-linecap="round"/></svg>',
+  'warn':  '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 2L14.5 13.5H1.5L8 2z" stroke="#f7c430" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6v4M8 11.5v.5" stroke="#f7c430" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'lock':  '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="#4ecdc4" stroke-width="1.5"/><path d="M5 7V5a3 3 0 016 0v2" stroke="#4ecdc4" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'key':   '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="6" cy="7" r="3.5" stroke="#f7c430" stroke-width="1.5"/><path d="M9 9l5 5M12 11l1.5 1.5" stroke="#f7c430" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'net':   '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 9a2 2 0 100-4 2 2 0 000 4z" fill="#4ecdc4"/><path d="M4.5 12.5a5 5 0 017 0M2 15a8.5 8.5 0 0112 0" stroke="#4ecdc4" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  'user':  '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="5.5" r="2.5" stroke="#4ecdc4" stroke-width="1.5"/><path d="M3 13c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="#4ecdc4" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'link':  '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M7 9a3 3 0 004.24.12l1.42-1.42a3 3 0 00-4.24-4.24L7 4.88M9 7a3 3 0 00-4.24-.12L3.34 8.3a3 3 0 004.24 4.24L9 11.12" stroke="#4ecdc4" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'star':  '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 2l1.6 4H14l-3.5 2.8 1.3 4.2L8 10.4l-3.8 2.6 1.3-4.2L2 6h4.4z" stroke="#f7c430" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+  'trash': '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M3 5h10M6 5V3h4v2M5 5l.7 8h4.6L11 5" stroke="#ff5f5f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'alert': '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="6" stroke="#ff5f5f" stroke-width="1.5"/><path d="M8 5v3M8 10v1" stroke="#ff5f5f" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'shield':'<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 2l5 2v4c0 2.8-2 5-5 6C5 13 3 10.8 3 8V4l5-2z" stroke="#4ecdc4" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  'clock': '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="9" r="5.5" stroke="#f7c430" stroke-width="1.5"/><path d="M8 6v3.5l2 1.5" stroke="#f7c430" stroke-width="1.5" stroke-linecap="round"/><path d="M6 2h4" stroke="#f7c430" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'up':    '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 12V4M5 7l3-3 3 3" stroke="#4ecdc4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'dot':   '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="3" fill="#4ecdc4"/></svg>',
+};
+function _toastIcon(i) {
+  // Accept shortcode ('ok','err') or raw SVG string (starts with '<')
+  if (i && i.startsWith('<')) return i;
+  return _TOAST_ICONS[i] || _TOAST_ICONS['dot'];
+}
+function toast(title, msg, icon='dot') {
   const c = $('toast-container'); if (!c) return null;
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = `<div class="toast-icon">${esc(icon)}</div>
+  el.innerHTML = `<div class="toast-icon">${_toastIcon(icon)}</div>
     <div class="toast-body">
       <div class="toast-title">${esc(title)}</div>
       ${msg ? `<div class="toast-msg">${esc(msg)}</div>` : ''}
@@ -4024,13 +4082,13 @@ let _deferredInstall = null;
 
 function triggerPWAInstall() {
   if (!_deferredInstall) {
-    toast('Already installed', 'MIUT is already installed.', '✓');
+    toast('Already installed', 'MIUT is already installed.', 'ok');
     return;
   }
   _deferredInstall.prompt();
   _deferredInstall.userChoice.then(choice => {
     if (choice.outcome === 'accepted') {
-      toast('MIUT installed!', 'Find it on your home screen.', '✓');
+      toast('MIUT installed!', 'Find it on your home screen.', 'ok');
     }
     _deferredInstall = null;
     /* Hide install button in settings */
@@ -4062,7 +4120,7 @@ window.addEventListener('appinstalled', () => {
   _deferredInstall = null;
   const row = $('install-app-row');
   if (row) row.style.display = 'none';
-  toast('MIUT installed!', 'Find it on your home screen.', '✓');
+  toast('MIUT installed!', 'Find it on your home screen.', 'ok');
 });
 
 // ── JSDoc type definitions ────────────────────────────────────────────────────
