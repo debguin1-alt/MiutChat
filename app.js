@@ -922,7 +922,7 @@ function _classifyError(e) {
 }
 
 // ─── Persistent Rate Limiter ─────────────────────────────────────────────────
-const WRONG_CODE_LIMIT = 5;
+const WRONG_CODE_LIMIT = 3; // 3 attempts before 30-second lockout
 let   _countdownTimer  = null;
 // Uses localStorage so a page reload does NOT reset the counter.
 // Token-bucket: refills 1 token every REFILL_MS up to MAX_TOKENS.
@@ -1030,31 +1030,29 @@ function _loadWrongState() {
 function _saveWrongState(obj) { _saveRlState(_RL_WRONG, obj); }
 
 function _recordWrongCode() {
-  const now = Date.now();
-  const st  = _loadWrongState();
+  const now  = Date.now();
+  const st   = _loadWrongState();
   st.wrongCount = (st.wrongCount || 0) + 1;
 
+  const errEl = $('join-error') || $('invite-error');
+
   if (st.wrongCount < WRONG_CODE_LIMIT) {
+    // Show remaining attempts — no lockout yet
     const left = WRONG_CODE_LIMIT - st.wrongCount;
-    const errEl = $('join-error') || $('invite-error');
-    if (errEl) {
-      errEl.textContent = left === 1
-        ? '⚠ Last attempt — you will be locked out after this'
-        : `🔑 Wrong code — ${left} attempt${left !== 1 ? 's' : ''} remaining`;
-      errEl.className = left === 1 ? 'error-msg error-urgent' : 'error-msg';
-    }
     _saveWrongState(st);
+    if (errEl) {
+      errEl.textContent = `Wrong code — ${left} attempt${left !== 1 ? 's' : ''} remaining`;
+      errEl.style.color = 'var(--danger)';
+    }
     return;
   }
 
-  const backoffIndex = st.wrongCount - WRONG_CODE_LIMIT;
-  const waitMs = Math.min(30000 * Math.pow(2, backoffIndex), 8 * 60 * 1000);
-  st.lockedUntil = now + waitMs;
+  // Lockout: 30 seconds flat after exhausting attempts
+  st.lockedUntil = now + 30000;
+  st.wrongCount  = 0; // reset count so next lockout starts fresh
   _saveWrongState(st);
-
-  const errEl = $('join-error') || $('invite-error');
   if (errEl) errEl.textContent = '';
-  _startCountdown(waitMs, 'enter');
+  _startCountdown(30000, 'enter');
 }
 
 function _checkEnterLock() {
@@ -1338,49 +1336,50 @@ function showScreen(id) {
 }
 
 function setupSidebar() {
-  // Inject overlay if missing (it's also in index.html as a static element)
+  // Create overlay backdrop if not already in DOM
   if (!$('sidebar-overlay')) {
-    const ov = document.createElement('div');
-    ov.id = 'sidebar-overlay';
-    document.body.appendChild(ov);
+    const o = document.createElement('div');
+    o.id = 'sidebar-overlay';
+    document.body.appendChild(o);
   }
 
-  // Wire overlay click → close sidebar (no touch trickery needed)
-  // Works because: sidebar z-index > overlay z-index.
-  // Touches ON the sidebar hit the sidebar, not the overlay.
-  // Touches on the dark area hit the overlay directly.
+  // OVERLAY: receives taps on the dark area to the right of sidebar.
+  // sidebar is z-index:20, overlay is z-index:18 → browser hit-test
+  // ensures taps on the sidebar portion never reach the overlay.
   const ov = $('sidebar-overlay');
-  if (ov && !ov.dataset.wired) {
-    ov.dataset.wired = '1';
-    ov.addEventListener('click', () => { if (_sidebarOpen) closeSidebar(); });
+  if (ov && !ov._miutWired) {
+    ov._miutWired = true;
+    // click covers mouse AND tap on most Android/iOS
+    ov.addEventListener('click', () => closeSidebar());
+    // touchend as belt-and-suspenders for Android Chrome
     ov.addEventListener('touchend', e => {
-      if (_sidebarOpen) { e.preventDefault(); closeSidebar(); }
+      e.preventDefault();
+      closeSidebar();
     }, { passive: false });
   }
 
-  // Wire hamburger button
+  // HAMBURGER
   const ham = $('hamburger-btn');
-  if (ham && !ham.dataset.wired) {
-    ham.dataset.wired = '1';
+  if (ham && !ham._miutWired) {
+    ham._miutWired = true;
     ham.addEventListener('click', () => _sidebarOpen ? closeSidebar() : openSidebar());
   }
 
-  // Edge-swipe: open from left edge / swipe-left to close
-  if (!document._sidebarSwipeWired) {
-    document._sidebarSwipeWired = true;
-    let sx = 0, sy = 0;
+  // SWIPE: right-from-left-edge opens, left-swipe closes
+  if (!document._miutSwipeWired) {
+    document._miutSwipeWired = true;
+    let _sx = 0, _sy = 0;
     document.addEventListener('touchstart', e => {
-      sx = e.touches[0].clientX;
-      sy = e.touches[0].clientY;
+      _sx = e.touches[0].clientX;
+      _sy = e.touches[0].clientY;
     }, { passive: true });
     document.addEventListener('touchend', e => {
-      // Skip if touch started inside the sidebar
-      if (e.target && e.target.closest && e.target.closest('#sidebar')) return;
-      const dx = e.changedTouches[0].clientX - sx;
-      const dy = e.changedTouches[0].clientY - sy;
-      if (Math.abs(dy) > Math.abs(dx) * 1.3 || Math.abs(dx) < 52) return;
-      if (dx > 0 && sx < 40 && !_sidebarOpen) openSidebar();
-      if (dx < 0 && _sidebarOpen) closeSidebar();
+      if (e.target.closest && e.target.closest('#sidebar')) return;
+      const dx = e.changedTouches[0].clientX - _sx;
+      const dy = e.changedTouches[0].clientY - _sy;
+      if (Math.abs(dy) > Math.abs(dx) * 1.4 || Math.abs(dx) < 50) return;
+      if (dx > 0 && _sx < 36 && !_sidebarOpen) openSidebar();
+      else if (dx < 0 && _sidebarOpen) closeSidebar();
     }, { passive: true });
   }
 }
@@ -1388,21 +1387,17 @@ function setupSidebar() {
 function toggleSidebar() { _sidebarOpen ? closeSidebar() : openSidebar(); }
 
 function openSidebar() {
-  if (window.matchMedia('(min-width:641px)').matches) return;
+  if (window.innerWidth >= 641) return;
   _sidebarOpen = true;
-  const sb = $('sidebar');
-  const ov = $('sidebar-overlay');
-  if (sb) sb.classList.add('open');
-  if (ov) ov.classList.add('active');
+  $('sidebar')?.classList.add('open');
+  $('sidebar-overlay')?.classList.add('active');
   document.body.classList.add('sidebar-active');
 }
 
 function closeSidebar() {
   _sidebarOpen = false;
-  const sb = $('sidebar');
-  const ov = $('sidebar-overlay');
-  if (sb) sb.classList.remove('open');
-  if (ov) ov.classList.remove('active');
+  $('sidebar')?.classList.remove('open');
+  $('sidebar-overlay')?.classList.remove('active');
   document.body.classList.remove('sidebar-active');
 }
 
@@ -1495,6 +1490,12 @@ async function handleEnter() {
       await registerPresence(role, true);
       await sendSys(`${state.me.name} rejoined the room`);
       bootApp();
+    } else if (prevData && prevData.declined) {
+      // Was explicitly declined by admin
+      const errEl = $('join-error');
+      if (errEl) errEl.textContent = 'Your request was declined by the room admin.';
+      setLoading($('btn-enter'), false);
+      return;
     } else {
       // D7: check if the room has approval required (stored on room doc)
       const roomData          = roomSnap.data();

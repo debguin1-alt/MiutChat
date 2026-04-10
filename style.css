@@ -204,7 +204,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 
 /* ── App shell ────────────────────────────────────── */
 #app{flex-direction:row}
-.sidebar{width:var(--sw);flex-shrink:0;background:#0a1615;border-right:1px solid var(--border);backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px);display:flex;flex-direction:column;height:100%;z-index:20;transition:transform .28s var(--inout),box-shadow .28s ease;will-change:transform}
+.sidebar{width:var(--sw);flex-shrink:0;background:#0e1a19;border-right:1px solid var(--border);backdrop-filter:none;display:flex;flex-direction:column;height:100%;z-index:20;transition:transform .28s var(--inout),box-shadow .28s ease;will-change:transform}
 .sidebar-header{display:flex;align-items:center;gap:8px;padding:0 12px 0 16px;height:var(--hh);flex-shrink:0;border-bottom:1px solid var(--border)}
 .sidebar-title-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;justify-content:center}
 .app-name{font-family:var(--fui);font-size:.86rem;font-weight:800;letter-spacing:5px;color:#fff;line-height:1}
@@ -269,12 +269,16 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
    When sidebar.open is z-index:20, taps on the sidebar go to the sidebar.
    Taps on the dark area to the right go to the overlay (z-index:18 > main content).
    This is the classic CSS drawer pattern — no JS event tricks needed. */
-#sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:18;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .26s ease,visibility .26s ease}
+#sidebar-overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.65);
+  z-index:30;
+  visibility:hidden;opacity:0;pointer-events:none;
+  transition:opacity .26s ease,visibility .26s ease;
+}
 #sidebar-overlay.active{visibility:visible;opacity:1;pointer-events:all}
-/* Remove old tap-close shield — no longer needed */
 #sidebar-tap-close{display:none!important}
-/* Sidebar open: z-index 20 (ABOVE overlay 18, BELOW modals 100+) */
-#sidebar.open{z-index:20!important;pointer-events:all!important}
+#sidebar.open{z-index:31!important;pointer-events:all!important;background:#0e1a19!important}
 
 /* ── Main area ────────────────────────────────────── */
 .main-area{flex:1;min-width:0;display:flex;flex-direction:column;height:100%;position:relative;overflow:hidden}
@@ -594,15 +598,15 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 @media (min-width:641px){
   .hamburger-btn{display:none!important}
   /* Desktop: always-visible sidebar, no transform, no overlay */
-  .sidebar{position:relative!important;transform:none!important;pointer-events:all!important;z-index:10!important;box-shadow:none!important;background:#0a1615!important}
+  .sidebar{position:relative!important;transform:none!important;pointer-events:all!important;z-index:10!important;box-shadow:none!important;background:#0e1a19!important}
   #sidebar-overlay{display:none!important;pointer-events:none!important}
   #sidebar-tap-close{display:none!important}
   body.sidebar-active{overflow:auto}
 }
 @media (max-width:640px){
   .hamburger-btn{display:flex!important}
-  .sidebar{position:fixed!important;inset:0 auto 0 0!important;width:82vw!important;max-width:300px!important;transform:translateX(-108%)!important;pointer-events:none!important;z-index:19!important;box-shadow:none!important;transition:transform .3s cubic-bezier(.4,0,.2,1),box-shadow .3s ease!important;background:#0a1615!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;overflow-y:auto;overflow-x:hidden}
-  .sidebar.open{transform:translateX(0)!important;pointer-events:all!important;z-index:20!important;box-shadow:20px 0 60px rgba(0,0,0,.85)!important}
+  .sidebar{position:fixed!important;inset:0 auto 0 0!important;width:82vw!important;max-width:300px!important;transform:translateX(-108%)!important;pointer-events:none!important;z-index:31!important;box-shadow:none!important;transition:transform .3s cubic-bezier(.4,0,.2,1),box-shadow .3s ease!important;background:#0e1a19!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;overflow-y:auto;overflow-x:hidden}
+  .sidebar.open{transform:translateX(0)!important;pointer-events:all!important;z-index:31!important;box-shadow:20px 0 60px rgba(0,0,0,.85)!important}
   body.sidebar-active{overflow:hidden}
   .msg-bubble-wrap{max-width:88%}
   .msg-media{max-width:200px}
