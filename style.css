@@ -662,3 +662,59 @@ button:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-rad
 .media-decrypt-spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .9s linear infinite}
 .media-decrypt-label{font-size:.64rem;color:var(--text2);letter-spacing:.5px}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Message TTL countdown timer ──────────────────────────────────── */
+.msg-ttl-timer{
+  font-family:var(--fmono);
+  font-size:.52rem;
+  color:var(--text2);
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:100px;
+  padding:1px 6px;
+  letter-spacing:.3px;
+  white-space:nowrap;
+  flex-shrink:0;
+  transition:color .3s,background .3s;
+}
+.msg-wrapper[data-expiring="1"] .msg-ttl-timer{
+  color:var(--danger);
+  background:var(--d-dim);
+  border-color:rgba(255,95,95,.3);
+  animation:expiry-p .7s ease infinite;
+}
+
+/* ── QR / Share popup ─────────────────────────────────────────────── */
+.share-popup{
+  position:fixed;inset:0;z-index:5000;
+  background:rgba(0,0,0,.72);
+  backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  animation:modal-in .28s cubic-bezier(.22,1,.36,1) both;
+}
+.share-popup-inner{
+  position:relative;
+  background:var(--glass2);
+  border:1px solid var(--border);
+  border-radius:22px;
+  padding:24px 22px 20px;
+  width:100%;max-width:280px;
+  text-align:center;
+  box-shadow:var(--sh-lg);
+  backdrop-filter:blur(24px);
+}
+.share-popup-title{
+  font-family:var(--fui);font-size:.76rem;font-weight:700;
+  letter-spacing:3px;color:var(--text);margin-bottom:4px;
+}
+.share-popup-note{font-size:.63rem;color:var(--text2);margin-bottom:6px}
+.share-popup-url{
+  font-family:var(--fmono);font-size:.58rem;color:var(--teal);
+  background:var(--teal-dim);border:1px solid var(--teal-b);
+  border-radius:8px;padding:5px 10px;margin-bottom:14px;
+  word-break:break-all;
+}
+.share-popup-copy{
+  width:100%;padding:12px;font-size:.7rem;letter-spacing:2px;
+  border-radius:12px;margin-top:2px;
+}

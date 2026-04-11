@@ -1899,18 +1899,59 @@ function _initAntiCapture() {
 let _roomTtlMs = 0; // 0 = no expiry
 function _startExpirySweep() {
   if (_expiryTimer) clearInterval(_expiryTimer);
-  _expiryTimer = setInterval(() => {
-    if (!_roomTtlMs) return;
-    const now = Date.now();
-    document.querySelectorAll('.msg-wrapper[data-ts]').forEach(w => {
-      const ts = parseInt(w.dataset.ts || '0', 10);
-      if (ts && now - ts > _roomTtlMs) {
-        w.style.transition = 'opacity .4s';
-        w.style.opacity = '0';
-        setTimeout(() => w.remove(), 420);
+  _expiryTimer = setInterval(_runExpirySweep, 5000); // check every 5s for accurate countdowns
+}
+
+function _runExpirySweep() {
+  if (!_roomTtlMs || !state.roomCode) return;
+  const now = Date.now();
+  document.querySelectorAll('.msg-wrapper[data-ts]').forEach(w => {
+    const ts    = parseInt(w.dataset.ts  || '0', 10);
+    const docId = w.dataset.docId || '';
+    if (!ts) return;
+    const age     = now - ts;
+    const timeLeft = _roomTtlMs - age;
+
+    if (timeLeft <= 0) {
+      // ── Expired: remove from DOM and delete from Firestore ─────────────
+      w.style.transition = 'opacity .4s, transform .4s';
+      w.style.opacity    = '0';
+      w.style.transform  = 'scale(.92)';
+      setTimeout(() => w.remove(), 420);
+
+      // Delete from Firestore (fire-and-forget, no error handling needed)
+      if (docId && db && state.roomCode) {
+        db.collection('rooms').doc(state.roomCode)
+          .collection('messages').doc(docId)
+          .delete().catch(() => {});
       }
-    });
-  }, 15000);
+      return;
+    }
+
+    // ── Still alive: show countdown timer ──────────────────────────────
+    // Warn (pulsing) when less than 10s remain
+    if (timeLeft < 10000) {
+      w.dataset.expiring = '1';
+    }
+
+    // Update or create the timer badge in msg-meta
+    let timerEl = w.querySelector('.msg-ttl-timer');
+    if (!timerEl) {
+      const meta = w.querySelector('.msg-meta');
+      if (!meta) return;
+      timerEl = document.createElement('span');
+      timerEl.className = 'msg-ttl-timer';
+      meta.prepend(timerEl);
+    }
+    const secs = Math.ceil(timeLeft / 1000);
+    if (secs > 3600) {
+      timerEl.textContent = Math.ceil(secs / 3600) + 'h';
+    } else if (secs > 60) {
+      timerEl.textContent = Math.ceil(secs / 60) + 'm';
+    } else {
+      timerEl.textContent = secs + 's';
+    }
+  });
 }
 
 // ─── Message TTL helpers ──────────────────────────────────────────────────────
@@ -2205,6 +2246,19 @@ function updateOnlineUI() {
     if (ms) ms.textContent = `${_onlineCount} members online`;
     if (sh) sh.style.display = 'none';
   }
+  // Update header status with live count
+  const statusEl = document.querySelector('.chat-status');
+  if (statusEl) {
+    if (_onlineCount > 1) {
+      statusEl.innerHTML = '<span style="display:inline-flex;align-items:center;gap:5px">' +
+        '<span style="width:6px;height:6px;border-radius:50%;background:var(--online);display:inline-block;box-shadow:0 0 5px var(--online)"></span>' +
+        _onlineCount + ' online</span>';
+    } else {
+      statusEl.innerHTML = '<span style="display:inline-flex;align-items:center;gap:5px">' +
+        '<span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block"></span>' +
+        'Encrypted · E2E</span>';
+    }
+  }
 }
 
 function startChatListeners() {
@@ -2481,6 +2535,14 @@ document.addEventListener('visibilitychange', () => {
     document.title = 'MIUT';
     stopChatListeners(); startChatListeners();
     setTimeout(_markVisibleAsRead, 400); // mark newly visible messages as read
+  }
+});
+
+// SW update notification
+window.addEventListener('message', ev => {
+  if (ev.data?.type === 'SW_UPDATED') {
+    const t = toast('Update available', 'Tap to reload and get the latest version.', 'net');
+    if (t) t.addEventListener('click', () => location.reload());
   }
 });
 
@@ -3706,20 +3768,45 @@ function copyRoomCode() {
 function shareRoomLink() {
   if (!state.roomCode) return;
   const encoded = btoa(unescape(encodeURIComponent(state.roomCode)));
-  const base    = window.location.origin + window.location.pathname;
+  const base    = window.location.origin + window.location.pathname.replace('index.html', '');
   const url     = `${base}?r=${encoded}`;
 
   if (navigator.share) {
     navigator.share({
       title: 'Join my MIUT room',
-      text:  'Tap to join — you\'ll need the room code to get in.',
+      text:  "Tap to join — you'll need the room code to get in.",
       url,
     }).catch(() => {});
     return;
   }
-  const cb = () => toast('Invite link copied!', 'Send the link + room code separately for security', 'link');
-  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(cb).catch(() => fbCopy(url, cb));
-  else fbCopy(url, cb);
+  // Desktop: show a mini popup with QR + copy button
+  _showSharePopup(url);
+}
+
+function _showSharePopup(url) {
+  document.querySelectorAll('.share-popup').forEach(e => e.remove());
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&color=4ecdc4&bgcolor=091413&data=${encodeURIComponent(url)}`;
+  const pop   = document.createElement('div');
+  pop.className = 'share-popup';
+  pop.innerHTML = `
+    <div class="share-popup-inner">
+      <div class="share-popup-title">Share Room</div>
+      <img src="${qrUrl}" alt="QR code" width="140" height="140" loading="lazy" style="border-radius:10px;margin:10px auto;display:block"/>
+      <div class="share-popup-note">Scan QR or copy link below</div>
+      <div class="share-popup-url">${url.slice(0, 52)}…</div>
+      <button class="share-popup-copy btn-join" id="share-copy-btn">Copy Invite Link</button>
+      <button class="share-popup-close icon-btn" id="share-close-btn" style="position:absolute;top:10px;right:10px">
+        <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>`;
+  document.body.appendChild(pop);
+  pop.querySelector('#share-copy-btn').addEventListener('click', () => {
+    const cb = () => { toast('Invite link copied!', 'Share code privately for security.', 'link'); pop.remove(); };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(cb).catch(() => fbCopy(url, cb));
+    else fbCopy(url, cb);
+  });
+  pop.querySelector('#share-close-btn').addEventListener('click', () => pop.remove());
+  pop.addEventListener('click', e => { if (e.target === pop) pop.remove(); });
 }
 
 function _detectInviteParam() {
