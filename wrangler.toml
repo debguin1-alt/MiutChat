@@ -28,4 +28,4 @@ binding = "MIUT_KV"
 id      = "f5973db3a599408ca5dbce63ed19487e"
 
 [triggers]
-crons = ["*/5 * * * *"]  # Run every 6 hours to clean up expired rooms
+crons = ["*/30 * * * *"]  # Run every  30 minutes to clean up expired rooms
