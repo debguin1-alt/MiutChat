@@ -718,3 +718,36 @@ button:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-rad
   width:100%;padding:12px;font-size:.7rem;letter-spacing:2px;
   border-radius:12px;margin-top:2px;
 }
+
+/* ── Screenshot protection overlay ──────────────────────────────── */
+#__ss_blur{
+  position:fixed;inset:0;z-index:99990;
+  pointer-events:none;
+  opacity:0;
+  background:var(--bg,#050d0c);
+  backdrop-filter:blur(32px) brightness(.4);
+  -webkit-backdrop-filter:blur(32px) brightness(.4);
+  transition:opacity .15s ease;
+  display:flex;align-items:center;justify-content:center;
+}
+#__ss_blur.active{
+  opacity:1;
+  pointer-events:all;
+}
+#__ss_blur::after{
+  content:"🔒";
+  font-size:2.4rem;
+  opacity:.35;
+}
+
+/* ── Optimistic upload progress bar ─────────────────────────────── */
+.msg-upload-progress{
+  height:3px;border-radius:2px;background:rgba(255,255,255,.15);
+  margin:6px 4px 0;overflow:hidden;
+}
+.msg-upload-bar{
+  height:100%;width:0;
+  background:linear-gradient(90deg,var(--teal),var(--teal2));
+  border-radius:2px;
+  transition:width 1.8s cubic-bezier(.4,0,.2,1);
+}

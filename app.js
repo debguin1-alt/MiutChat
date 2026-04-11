@@ -1181,8 +1181,10 @@ window.addEventListener('DOMContentLoaded', () => {
   _wireAllHandlers();
   _wireEntropyListeners();
   // Warm up Anonymous Auth immediately so it's ready when user clicks Enter/Create.
-  // Avoids the first-click permission-denied delay.
   getUID().catch(() => {});
+
+  // ── Three-finger gesture + screenshot detection ────────────────────
+  _initScreenshotProtection();
   // ── Rotating placeholder text (CSP-safe, moved from inline HTML script) ──
   (function initRotatingPlaceholders() {
     function rotatePlaceholder(input) {
@@ -1455,12 +1457,12 @@ async function handleCreate() {
     const saltBytes = crypto.getRandomValues(new Uint8Array(16));
     const roomSalt  = _b64uEnc(saltBytes.buffer);
     _roomSalt = roomSalt;
-    // autoDeleteAt = 48h from now — Firebase TTL policy auto-deletes this doc
-    const _roomTTLms  = 48 * 60 * 60 * 1000;
-    const _autoDelete = firebase.firestore.Timestamp.fromMillis(Date.now() + _roomTTLms);
+    // autoDeleteAt = 30 min from now — extended on each message send
+    const _autoDeleteAt = firebase.firestore.Timestamp.fromMillis(Date.now() + 1800000);
     await db.collection('rooms').doc(code).set({
       createdAt: ts_now(), creatorId: uid, epoch: 0, salt: roomSalt,
-      autoDeleteAt: _autoDelete,
+      autoDeleteAt: _autoDeleteAt,
+      lastActivity: ts_now(),
     }, { merge: true });
     _roomEpoch = 0;
     state.me = await buildMe(resolveName()); state.roomCode = code;
@@ -1493,7 +1495,10 @@ async function handleEnter() {
       _recordWrongCode();
       return;
     }
-    _saveWrongState({ wrongCount: 0, lockedUntil: 0 });  // reset on correct code
+    _saveWrongState({ wrongCount: 0, lockedUntil: 0 });
+    // Check if room has expired before entering
+    const _expired = await _checkRoomExpiry(code, db);
+    if (_expired) { setLoading(btn, false); return; }
     _roomEpoch = roomSnap.data()?.epoch || 0;
     _roomSalt  = roomSnap.data()?.salt  || null;
 
@@ -2478,6 +2483,121 @@ function renderMembers(snap) {
     $('hamburger-btn')?.classList.remove('has-pending');
   }
 }
+// ── Screenshot / Screen recording protection ────────────────────────────────
+// Three-finger tap → immediate blur. visibilitychange also triggers blur.
+// On Android, FLAG_SECURE can't be set from a web page, but we can:
+//  1. Detect 3-finger taps and blur instantly
+//  2. Listen for visibilitychange (screen capture shows hidden tab)
+//  3. Blur on window blur (app switcher, notification shade, etc.)
+//  4. CSS: user-select:none already set globally
+
+let _screenshotBlurEl   = null;
+let _screenshotBlurTimer = null;
+const BLUR_DURATION_MS  = 4000; // how long blur stays after gesture
+
+function _initScreenshotProtection() {
+  // ── Inject blur overlay ──────────────────────────────────────────
+  if (!document.getElementById('__ss_blur')) {
+    const el = document.createElement('div');
+    el.id = '__ss_blur';
+    el.setAttribute('aria-hidden','true');
+    document.body.appendChild(el);
+    _screenshotBlurEl = el;
+  }
+
+  // ── 3-finger tap detection ────────────────────────────────────────
+  // Count simultaneous touches; ≥3 = screenshot gesture on most Android/iOS
+  let _maxTouches = 0;
+  document.addEventListener('touchstart', e => {
+    _maxTouches = Math.max(_maxTouches, e.touches.length);
+  }, { passive: true, capture: true });
+  document.addEventListener('touchend', e => {
+    if (_maxTouches >= 3) {
+      _triggerScreenBlur('gesture');
+    }
+    if (e.touches.length === 0) _maxTouches = 0;
+  }, { passive: true, capture: true });
+
+  // ── visibilitychange — screen may be being recorded / captured ───
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      _triggerScreenBlur('hidden');
+    } else {
+      // Brief delay — if user just switched app and back, unblur quickly
+      setTimeout(() => _unblurScreen(), 800);
+    }
+  });
+
+  // ── window blur (notification bar, app switcher) ─────────────────
+  window.addEventListener('blur', () => _triggerScreenBlur('blur'));
+  window.addEventListener('focus', () => setTimeout(_unblurScreen, 600));
+
+  // ── Media capture detection (Chrome only) ────────────────────────
+  // MediaDevices.getDisplayMedia doesn't fire without user gesture,
+  // but we can detect it starting via the 'capture' media type.
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    try {
+      navigator.mediaDevices.addEventListener('devicechange', () => {
+        // May indicate capture started — blur as precaution
+        _triggerScreenBlur('device');
+      });
+    } catch {}
+  }
+}
+
+function _triggerScreenBlur(reason) {
+  const el = _screenshotBlurEl || document.getElementById('__ss_blur');
+  if (!el) return;
+  el.classList.add('active');
+  if (_screenshotBlurTimer) clearTimeout(_screenshotBlurTimer);
+  // Auto-unblur after BLUR_DURATION_MS (except on hidden tab)
+  if (reason !== 'hidden') {
+    _screenshotBlurTimer = setTimeout(_unblurScreen, BLUR_DURATION_MS);
+  }
+}
+
+function _unblurScreen() {
+  const el = _screenshotBlurEl || document.getElementById('__ss_blur');
+  if (el) el.classList.remove('active');
+  if (_screenshotBlurTimer) { clearTimeout(_screenshotBlurTimer); _screenshotBlurTimer = null; }
+}
+
+/** Extend room autoDeleteAt by 30 min from now (debounced) */
+let _extendTimer = null;
+function _extendRoomTtl() {
+  if (!state.roomCode || !db) return;
+  if (_extendTimer) return;           // already scheduled this second
+  _extendTimer = setTimeout(() => {
+    _extendTimer = null;
+    const newExpiry = firebase.firestore.Timestamp.fromMillis(Date.now() + 1800000);
+    db.collection('rooms').doc(state.roomCode)
+      .update({ autoDeleteAt: newExpiry, lastActivity: ts_now() })
+      .catch(() => {});
+  }, 2000);                          // debounce 2s so rapid typing = 1 write
+}
+
+/** Check if room has expired (autoDeleteAt < now) and show expired screen */
+async function _checkRoomExpiry(code, db) {
+  try {
+    const snap = await db.collection('rooms').doc(code).get();
+    if (!snap.exists) return false;
+    const data = snap.data() || {};
+    const expiry = data.autoDeleteAt?.toMillis?.() || 0;
+    if (expiry && expiry < Date.now()) {
+      // Room expired — wipe and send user back to join screen
+      toast('Room expired', 'This room has expired after inactivity.', 'clock');
+      await wipeRoom(code, db).catch(() => {});
+      clearCacheForRoom(code).catch(() => {});
+      localStorage.removeItem(CONFIG.SESSION_KEY);
+      localStorage.removeItem(CONFIG.ROOM_KEY);
+      state.me = null; state.roomCode = null;
+      showScreen('join-screen');
+      return true;
+    }
+    return false;
+  } catch { return false; }
+}
+
 /** _ping — anonymous event counter, fire-and-forget */
 function _ping(event) {
   try {
@@ -2612,6 +2732,8 @@ async function sendMessage() {
     clearReply();
   }
 
+  // Extend room expiry on activity (30min from last message)
+  _extendRoomTtl();
   db.collection('rooms').doc(state.roomCode).collection('messages').add(msgData)
     .then(() => {
       _ping('message_sent');
@@ -2764,7 +2886,43 @@ async function handleFileAttach(e) {
   const isVid   = file.type.startsWith('video/');
   const msgType = isImg ? 'image' : isVid ? 'video' : 'file';
 
-  toast('Encrypting…', file.name, 'dot');
+  // ── Optimistic UI: show local preview IMMEDIATELY ───────────────────
+  // User sees their image at once; upload happens in background.
+  let _optimisticEl = null;
+  if (isImg) {
+    const localUrl  = URL.createObjectURL(file);
+    const fakeDocId = 'opt_' + Date.now();
+    const fakeData  = {
+      type: 'image', senderId: state.me.id, senderName: state.me.name,
+      senderColor: state.me.color, ts: Date.now(), enc: '', sig: null,
+    };
+    // Inject a temporary message wrapper with the local blob URL
+    const area = $('messages-area');
+    if (area) {
+      const wrap = document.createElement('div');
+      wrap.className    = 'msg-wrapper sent';
+      wrap.dataset.docId = fakeDocId;
+      wrap.dataset.ts    = fakeData.ts;
+      wrap.style.opacity = '0.75';
+      wrap.innerHTML = `<div class="msg-swipe-wrapper"><div class="msg-bubble-wrap">
+        <div class="msg-inner">
+          <div class="msg-bubble" style="padding:4px;background:transparent">
+            <img src="${localUrl}" style="max-width:220px;max-height:220px;border-radius:14px;display:block" loading="eager"/>
+            <div class="msg-upload-progress"><div class="msg-upload-bar"></div></div>
+          </div>
+          <div class="msg-meta"><span class="msg-time-sm">Sending…</span></div>
+        </div>
+      </div></div>`;
+      area.appendChild(wrap);
+      scrollBottom();
+      _optimisticEl = wrap;
+      // Animate progress bar
+      const bar = wrap.querySelector('.msg-upload-bar');
+      if (bar) { setTimeout(() => { bar.style.width = '60%'; }, 50); }
+    }
+  } else {
+    toast('Encrypting…', file.name, 'dot');
+  }
 
   try {
     const encrypted = await encBytes(file, state.roomCode);
@@ -2800,8 +2958,16 @@ async function handleFileAttach(e) {
       }
     }
     playSound('send');
-    toast('Sent!', file.name, 'ok');
+    if (_optimisticEl) {
+      // Fade out the optimistic preview — real message from Firestore will appear
+      _optimisticEl.style.transition = 'opacity .3s';
+      _optimisticEl.style.opacity = '0';
+      setTimeout(() => _optimisticEl?.remove(), 320);
+    } else {
+      toast('Sent!', file.name, 'ok');
+    }
   } catch (err) {
+    if (_optimisticEl) { _optimisticEl.remove(); }
     toast('Upload failed', err.message || 'Check your connection', 'err');
   }
 }
@@ -3429,11 +3595,34 @@ function showInlineActions(wrap, docId, plainText, msgTs, isMine) {
     strip.appendChild(delRow);
   }
 
-  // Position: right side for sent, left side for received
+  // Smart positioning: right/left based on sender, above/below based on viewport space
   strip.dataset.side = isMine ? 'sent' : 'received';
   wrap.style.position = 'relative';
   wrap.appendChild(strip);
-  requestAnimationFrame(() => strip.classList.add('visible'));
+  requestAnimationFrame(() => {
+    strip.classList.add('visible');
+    // Measure available space and flip if strip would go off-screen
+    const wrapRect  = wrap.getBoundingClientRect();
+    const stripH    = strip.offsetHeight || 200;
+    const vpH       = window.innerHeight;
+    const spaceAbove = wrapRect.top;
+    const spaceBelow = vpH - wrapRect.bottom;
+    if (spaceAbove < stripH + 20 && spaceBelow > stripH + 20) {
+      // Not enough space above — show below the message
+      strip.style.bottom = 'auto';
+      strip.style.top    = 'calc(100% + 8px)';
+      strip.style.transformOrigin = isMine ? 'top right' : 'top left';
+    }
+    // Horizontal: prevent strip from going off left edge
+    const stripRect = strip.getBoundingClientRect();
+    if (stripRect.left < 8) {
+      strip.style.left  = '0';
+      strip.style.right = 'auto';
+    } else if (stripRect.right > window.innerWidth - 8) {
+      strip.style.right = '0';
+      strip.style.left  = 'auto';
+    }
+  });
 
   const close = e => {
     if (strip.isConnected && !strip.contains(e.target)) {
