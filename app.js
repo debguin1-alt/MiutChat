@@ -3956,9 +3956,9 @@ function copyRoomCode() {
 
 function shareRoomLink() {
   if (!state.roomCode) return;
-  const encoded = btoa(unescape(encodeURIComponent(state.roomCode)));
-  const base    = window.location.origin + window.location.pathname.replace('index.html', '');
-  const url     = `${base}?r=${encoded}`;
+  // Plain URL encoding — no base64 obfuscation (room code is the key; sharing = sharing)
+  const base = window.location.origin + window.location.pathname.replace('index.html', '');
+  const url  = `${base}?r=${encodeURIComponent(state.roomCode)}`;
 
   if (navigator.share) {
     navigator.share({
@@ -4003,6 +4003,13 @@ function _detectInviteParam() {
     const p = new URLSearchParams(window.location.search);
     const r = p.get('r');
     if (!r) return null;
+    // Support both plain encodeURIComponent (new) and legacy base64 (old links)
+    try {
+      const decoded = decodeURIComponent(r);
+      // If it looks like a valid room code, use it directly
+      if (/^[a-zA-Z0-9 _\-@#!?+*=.]{6,64}$/.test(decoded)) return decoded;
+    } catch {}
+    // Fallback: try base64 decode for old-style invite links
     return decodeURIComponent(escape(atob(r)));
   } catch { return null; }
 }
