@@ -27,5 +27,3 @@ RL_SEND_WIN_S = "10"
 binding = "MIUT_KV"
 id      = "f5973db3a599408ca5dbce63ed19487e"
 
-[triggers]
-crons = ["*/30 * * * *"]  # Run every  30 minutes to clean up expired rooms
