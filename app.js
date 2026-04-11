@@ -103,6 +103,19 @@ function _wireAllHandlers() {
   const settingsCloseBtn = document.querySelector('#settings-modal .modal-header .icon-btn');
   if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => closeSettings());
 
+  // Create room TTL selector
+  document.querySelectorAll('#create-ttl-selector .ttl-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#create-ttl-selector .ttl-opt').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // Vault
+  on('btn-vault', 'click', () => openVault());
+  on('vault-close-btn', 'click', () => closeVault());
+  on('vault-modal', 'click', e => { if (e.target.id === 'vault-modal') closeVault(); });
+
   on('sound-toggle',    'change', () => toggleSoundAlerts());
   on('anim-toggle',     'change', () => toggleAnimations());
   on('approval-toggle', 'change', () => toggleApprovalGate());
@@ -1469,7 +1482,13 @@ async function handleCreate() {
     saveSession(); saveRoom(code);
     await registerPresence('admin', true);
     // Approval gate is always on — no choice presented
-    await db.collection('rooms').doc(code).update({ approvalRequired: true }).catch(() => {});
+    // Apply user-selected message expiry (from create room TTL selector)
+    const _selectedTtlBtn = document.querySelector('#create-ttl-selector .ttl-opt.active');
+    const _selectedTtlSec = parseInt(_selectedTtlBtn?.dataset?.ttl || '0', 10);
+    const _createUpdates = { approvalRequired: true };
+    if (_selectedTtlSec > 0) _createUpdates.msgTtlMs = _selectedTtlSec * 1000;
+    await db.collection('rooms').doc(code).update(_createUpdates).catch(() => {});
+    if (_selectedTtlSec > 0) _roomTtlMs = _selectedTtlSec * 1000;
     await sendSys(`${state.me.name} created this room`);
     _ping('room_created');
     bootApp();
@@ -2608,6 +2627,275 @@ function _ping(event) {
       keepalive: true,
     }).catch(() => {});
   } catch {}
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// SECURE VAULT — client-side encrypted note storage
+// Storage: IndexedDB (miut-vault store)
+// Encryption: PBKDF2(password, salt) → AES-256-GCM
+// One password per vault entry; no master password
+// ════════════════════════════════════════════════════════════════════════════
+
+const VAULT_STORE = 'vault';
+let _vaultDb = null;
+
+async function _openVaultDb() {
+  if (_vaultDb) return _vaultDb;
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('miut-vault', 1);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains(VAULT_STORE)) {
+        db.createObjectStore(VAULT_STORE, { keyPath: 'id' });
+      }
+    };
+    r.onsuccess = () => { _vaultDb = r.result; res(_vaultDb); };
+    r.onerror   = () => rej(r.error);
+  });
+}
+
+async function _vaultDeriveKey(password, saltBytes) {
+  const enc  = new TextEncoder();
+  const base = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: saltBytes, iterations: 200000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt','decrypt']
+  );
+}
+
+async function _vaultEncrypt(text, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const key  = await _vaultDeriveKey(password, salt);
+  const ct   = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text));
+  // Pack: salt(16) + iv(12) + ciphertext
+  const buf  = new Uint8Array(16 + 12 + ct.byteLength);
+  buf.set(salt, 0); buf.set(iv, 16); buf.set(new Uint8Array(ct), 28);
+  return _b64uEnc(buf.buffer);
+}
+
+async function _vaultDecrypt(b64, password) {
+  const buf  = _b64uDec(b64);
+  const salt = buf.slice(0, 16);
+  const iv   = buf.slice(16, 28);
+  const ct   = buf.slice(28);
+  const key  = await _vaultDeriveKey(password, salt);
+  const pt   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return new TextDecoder().decode(pt);
+}
+
+async function _vaultList() {
+  const db = await _openVaultDb();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction(VAULT_STORE, 'readonly');
+    const req = tx.objectStore(VAULT_STORE).getAll();
+    req.onsuccess = () => res(req.result || []);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function _vaultSave(entry) {
+  const db = await _openVaultDb();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction(VAULT_STORE, 'readwrite');
+    const req = tx.objectStore(VAULT_STORE).put(entry);
+    req.onsuccess = res; req.onerror = rej;
+  });
+}
+
+async function _vaultDelete(id) {
+  const db = await _openVaultDb();
+  return new Promise((res, rej) => {
+    const tx  = db.transaction(VAULT_STORE, 'readwrite');
+    const req = tx.objectStore(VAULT_STORE).delete(id);
+    req.onsuccess = res; req.onerror = rej;
+  });
+}
+
+// ── Vault UI ─────────────────────────────────────────────────────────────────
+async function openVault() {
+  const modal = $('vault-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  closeSidebar();
+  await _renderVaultList();
+}
+
+function closeVault() {
+  const modal = $('vault-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function _renderVaultList() {
+  const body = $('vault-body');
+  if (!body) return;
+  body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2);font-size:.72rem">Loading…</div>';
+
+  let entries = [];
+  try { entries = await _vaultList(); } catch {}
+
+  const addBtn = `<button class="btn-join" id="vault-add-btn" style="width:100%;margin-top:4px;padding:12px">
+    <svg viewBox="0 0 20 20" fill="none" width="14" height="14" style="margin-right:6px"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    New Vault Entry
+  </button>`;
+
+  if (!entries.length) {
+    body.innerHTML = `<div style="text-align:center;padding:32px 16px">
+      <svg viewBox="0 0 48 48" fill="none" width="44" height="44" style="margin:0 auto 14px;display:block;opacity:.3">
+        <rect x="4" y="12" width="40" height="28" rx="4" stroke="currentColor" stroke-width="2"/>
+        <circle cx="24" cy="26" r="6" stroke="currentColor" stroke-width="2"/>
+        <path d="M18 12V10a6 6 0 0112 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="24" cy="26" r="2" fill="currentColor"/>
+      </svg>
+      <div style="font-family:var(--fui);font-size:.72rem;color:var(--text2);letter-spacing:1px">No vault entries yet</div>
+    </div>${addBtn}`;
+  } else {
+    const list = entries.map(e => `
+      <div class="vault-entry" data-id="${esc(e.id)}">
+        <div class="vault-entry-icon">
+          <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><rect x="2" y="5" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="11" r="2.2" stroke="currentColor" stroke-width="1.3"/><path d="M7 5V4a3 3 0 016 0v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </div>
+        <div class="vault-entry-info">
+          <div class="vault-entry-name">${esc(e.name)}</div>
+          <div class="vault-entry-meta">${new Date(e.ts).toLocaleDateString()}</div>
+        </div>
+        <div class="vault-entry-actions">
+          <button class="icon-btn vault-open-btn" data-id="${esc(e.id)}" title="Open">
+            <svg viewBox="0 0 20 20" fill="none" width="14" height="14"><path d="M8 4H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2v-4M12 2h6v6M18 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+          <button class="icon-btn vault-del-btn" data-id="${esc(e.id)}" title="Delete" style="color:var(--danger)">
+            <svg viewBox="0 0 20 20" fill="none" width="14" height="14"><path d="M4 6h12M8 6V4h4v2M7 6l.7 9h4.6L13 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>`).join('');
+    body.innerHTML = `<div class="vault-list">${list}</div>${addBtn}`;
+  }
+
+  // Wire events
+  body.querySelector('#vault-add-btn')?.addEventListener('click', _vaultShowNew);
+  body.querySelectorAll('.vault-open-btn').forEach(b => b.addEventListener('click', () => _vaultOpen(b.dataset.id)));
+  body.querySelectorAll('.vault-del-btn').forEach(b => b.addEventListener('click', () => _vaultConfirmDelete(b.dataset.id)));
+}
+
+function _vaultPromptForm(title, namePlaceholder, btnLabel, onSubmit) {
+  const body = $('vault-body');
+  body.innerHTML = `
+    <div class="vault-form">
+      <div class="field-group">
+        <label>FOLDER NAME</label>
+        <div class="input-wrap">
+          <input type="text" id="vault-name-inp" placeholder="${namePlaceholder}" maxlength="60" autocomplete="off"/>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>VAULT PASSWORD <span class="label-opt">— used only for this entry</span></label>
+        <div class="input-wrap">
+          <input type="password" id="vault-pw-inp" placeholder="Enter a strong password" maxlength="128" autocomplete="new-password"/>
+        </div>
+      </div>
+      <div class="field-group" id="vault-content-group">
+        <label>CONTENT</label>
+        <div class="input-wrap">
+          <textarea id="vault-content-inp" rows="5" placeholder="Notes, passwords, links…" style="resize:vertical;min-height:100px;font-family:var(--fmono);font-size:.76rem"></textarea>
+        </div>
+      </div>
+      <div id="vault-form-err" class="error-msg" style="display:none"></div>
+      <button class="btn-join" id="vault-submit-btn" style="width:100%;margin-top:8px">
+        <span id="vault-submit-label">${btnLabel}</span>
+      </button>
+      <button class="btn-logout" id="vault-back-btn" style="margin-top:8px;width:100%">← Back</button>
+    </div>`;
+
+  body.querySelector('#vault-back-btn').addEventListener('click', _renderVaultList);
+  body.querySelector('#vault-submit-btn').addEventListener('click', async () => {
+    const nameEl = $('vault-name-inp'), pwEl = $('vault-pw-inp'), contEl = $('vault-content-inp');
+    const errEl  = $('vault-form-err');
+    const name   = nameEl?.value?.trim() || '';
+    const pw     = pwEl?.value || '';
+    const cont   = contEl?.value || '';
+    if (!name) { errEl.textContent = 'Folder name required'; errEl.style.display = ''; return; }
+    if (pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+    const lbl = $('vault-submit-label'); if (lbl) lbl.textContent = 'Saving…';
+    try {
+      await onSubmit(name, pw, cont);
+    } catch (err) {
+      errEl.textContent = 'Wrong password or corrupted entry'; errEl.style.display = '';
+      if (lbl) lbl.textContent = btnLabel;
+    }
+  });
+}
+
+function _vaultShowNew() {
+  _vaultPromptForm('New Entry', 'e.g. My Passwords', 'Save Encrypted', async (name, pw, cont) => {
+    const enc   = await _vaultEncrypt(cont, pw);
+    const entry = { id: 'v_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), name, enc, ts: Date.now() };
+    await _vaultSave(entry);
+    toast('Vault entry saved', name, 'lock');
+    await _renderVaultList();
+  });
+}
+
+async function _vaultOpen(id) {
+  const entries = await _vaultList();
+  const entry   = entries.find(e => e.id === id);
+  if (!entry) return;
+
+  const body = $('vault-body');
+  body.innerHTML = `
+    <div class="vault-form">
+      <div style="font-family:var(--fui);font-size:.8rem;font-weight:700;letter-spacing:2px;color:var(--text);margin-bottom:16px">${esc(entry.name)}</div>
+      <div class="field-group">
+        <label>VAULT PASSWORD</label>
+        <div class="input-wrap">
+          <input type="password" id="vault-unlock-pw" placeholder="Enter vault password" maxlength="128" autocomplete="off"/>
+        </div>
+      </div>
+      <div id="vault-content-display" style="display:none" class="vault-content-box"></div>
+      <div id="vault-open-err" class="error-msg" style="display:none"></div>
+      <button class="btn-join" id="vault-unlock-btn" style="width:100%;margin-top:8px"><span>Unlock</span></button>
+      <button class="btn-logout" id="vault-back-btn2" style="margin-top:8px;width:100%">← Back</button>
+    </div>`;
+
+  body.querySelector('#vault-back-btn2').addEventListener('click', _renderVaultList);
+  body.querySelector('#vault-unlock-btn').addEventListener('click', async () => {
+    const pw = $('vault-unlock-pw')?.value || '';
+    const errEl = $('vault-open-err');
+    if (!pw) { errEl.textContent = 'Enter password'; errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+    try {
+      const plain = await _vaultDecrypt(entry.enc, pw);
+      const display = $('vault-content-display');
+      display.style.display = 'block';
+      display.textContent = plain || '(empty)';
+      $('vault-unlock-pw').closest('.field-group').style.display = 'none';
+      $('vault-unlock-btn').style.display = 'none';
+    } catch {
+      errEl.textContent = 'Wrong password'; errEl.style.display = '';
+    }
+  });
+}
+
+async function _vaultConfirmDelete(id) {
+  const entries = await _vaultList();
+  const entry   = entries.find(e => e.id === id);
+  if (!entry) return;
+  const body    = $('vault-body');
+  body.innerHTML = `<div style="padding:16px;text-align:center">
+    <div style="font-family:var(--fui);font-size:.76rem;color:var(--text);margin-bottom:12px">Delete "${esc(entry.name)}"?</div>
+    <div style="font-size:.68rem;color:var(--text2);margin-bottom:20px">This cannot be undone. The encrypted data will be permanently erased.</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn-logout" id="vd-cancel" style="flex:1">Cancel</button>
+      <button class="btn-join" id="vd-confirm" style="flex:1;background:var(--danger)">Delete</button>
+    </div>
+  </div>`;
+  body.querySelector('#vd-cancel').addEventListener('click', _renderVaultList);
+  body.querySelector('#vd-confirm').addEventListener('click', async () => {
+    await _vaultDelete(id);
+    toast('Entry deleted', entry.name, 'trash');
+    await _renderVaultList();
+  });
 }
 
 // wipeRoom accepts an explicit Firestore instance to avoid using the global `db`
