@@ -1,235 +1,228 @@
-/**
- * screen-guard.js — Advanced Anti-Screenshot / Anti-Screen-Recording System
- *
- * Strategy: multi-signal detection → instant zero-delay blur
- *
- * Signals detected:
- *  1. 3+ finger touchstart (screenshot gesture on Android)
- *  2. visibilitychange hidden (tab switch, screen capture start)
- *  3. window blur (notification shade, app switcher, power button)
- *  4. devicechange (capture device connected)
- *  5. keydown: PrintScreen / meta+shift+3/4 (desktop screenshots)
- *  6. focus/blur delta timing (screen record often creates rapid blur/focus)
- *
- * Architecture:
- *  - Overlay injected immediately at script load (not on DOM ready)
- *    so there is ZERO paint before protection is active
- *  - CSS backdrop-filter + opacity transition = instant visual cover
- *  - Signal weighting: some signals alone trigger, others combine
- *  - Debounce on unblur to prevent flash between trigger + settle
- */
-
 'use strict';
+/* ═══════════════════════════════════════════════════════════════════════════
+   screen-guard.js  v2.0  — Production Anti-Screenshot / Anti-Recording
+   ═══════════════════════════════════════════════════════════════════════════ */
+window.ScreenGuard = (function () {
+  const Z = '2147483647';
+  const BLUR_MS      = 5000;
+  const HIDDEN_MS    = 0;
+  const UNBLUR_DELAY = 650;
+  const DEVTOOLS_THR = 160;
+  const WM_MS        = 1500;
+  const WEAK_WIN     = 1200;
+  const WEAK_N       = 2;
+  const KILL_CLS     = '__sg_kill';
 
-(function ScreenGuard() {
+  let _active = true, _blurred = false, _username = '';
+  let _unblurT = null, _autoT = null, _wmT = null, _reapplyT = null;
+  let _weakN = 0, _weakTs = 0, _maxTouch = 0, _lastBlurTs = 0;
+  let _lastFrame = 0, _rafOn = false;
 
-  /* ── Config ──────────────────────────────────────────────────────── */
-  const CFG = {
-    TOUCH_THRESHOLD:    3,      // fingers needed to trigger
-    BLUR_MS:            5000,   // auto-unblur after N ms (for transient signals)
-    HIDDEN_BLUR_MS:     0,      // 0 = stay blurred until visible again
-    UNBLUR_DEBOUNCE:    600,    // ms to wait before unblurring after focus
-    SIGNAL_WINDOW_MS:   1200,   // window to combine weak signals
-    BLUR_OPACITY:       '1',
-    ENABLE:             true,
-  };
+  /* ── DOM: inject synchronously ─────────────────────────────────────────── */
+  const _ov  = document.createElement('div');
+  const _wm  = document.createElement('div');
+  const _sty = document.createElement('style');
 
-  /* ── State ───────────────────────────────────────────────────────── */
-  let _blurred        = false;
-  let _unblurTimer    = null;
-  let _autoUnblurTimer= null;
-  let _lastSignalTs   = 0;
-  let _recentSignals  = 0;
-  let _maxTouches     = 0;
-  let _touchActive    = false;
+  _ov.id = '__sg_ov';
+  _ov.setAttribute('aria-hidden', 'true');
+  _wm.id = '__sg_wm';
+  _sty.id = '__sg_sty';
 
-  /* ── Overlay: inject SYNCHRONOUSLY before any paint ─────────────── */
-  // Use document.write to inject immediately during parsing if possible,
-  // otherwise inject via createElement (DOMContentLoaded not needed —
-  // we append to document.documentElement directly).
-  const _el = document.createElement('div');
-  _el.id = '__sg_overlay';
-  _el.setAttribute('aria-hidden', 'true');
-  _el.style.cssText = [
-    'position:fixed',
-    'inset:0',
-    'z-index:2147483647',     // max z-index
-    'pointer-events:none',
-    'opacity:0',
-    'background:#050d0c',
-    'backdrop-filter:blur(28px) brightness(.25)',
-    '-webkit-backdrop-filter:blur(28px) brightness(.25)',
-    'transition:opacity 0ms',  // ZERO transition when activating
-    'will-change:opacity',
-    'contain:strict',
-  ].join(';');
+  function _ovStyle(active) {
+    _ov.style.cssText = 'position:fixed;inset:0;z-index:' + Z +
+      ';opacity:' + (active ? '1' : '0') +
+      ';pointer-events:' + (active ? 'all' : 'none') +
+      ';background:rgba(5,13,12,.97);transition:' +
+      (active ? 'none' : 'opacity 260ms ease') + ';contain:strict;will-change:opacity';
+  }
+  _ovStyle(false);
 
-  // Inject as early as possible — appended to <html> if <body> not yet parsed
-  (document.body || document.documentElement).appendChild(_el);
+  _wm.style.cssText = 'position:fixed;inset:-40%;z-index:' + (Z - 1) +
+    ';pointer-events:none;user-select:none;-webkit-user-select:none' +
+    ';transform:rotate(-22deg);display:grid;grid-template-columns:repeat(5,1fr)' +
+    ';opacity:.055;will-change:transform';
 
-  /* ── Blur / Unblur ───────────────────────────────────────────────── */
-  function _blur(reason, autoUnblurMs) {
-    if (!CFG.ENABLE) return;
+  _sty.textContent =
+    '.' + KILL_CLS + ',.' + KILL_CLS + ' *{' +
+      'filter:blur(24px) brightness(.04)!important;' +
+      'pointer-events:none!important;user-select:none!important;' +
+      '-webkit-user-select:none!important}' +
+    '#__sg_ov.__sg_on{opacity:1!important;pointer-events:all!important}';
+
+  const _root = document.body || document.documentElement;
+  _root.appendChild(_ov);
+  _root.appendChild(_wm);
+  (document.head || document.documentElement).appendChild(_sty);
+
+  /* ── Blur / Unblur ─────────────────────────────────────────────────────── */
+  function _blur(why, ms) {
+    if (!_active) return;
     _blurred = true;
-    _el.style.transition    = 'opacity 0ms';     // instant activation
-    _el.style.opacity       = CFG.BLUR_OPACITY;
-    _el.style.pointerEvents = 'all';
-
-    if (_autoUnblurTimer) { clearTimeout(_autoUnblurTimer); _autoUnblurTimer = null; }
-    if (_unblurTimer)     { clearTimeout(_unblurTimer);     _unblurTimer     = null; }
-
-    const ms = autoUnblurMs ?? CFG.BLUR_MS;
-    if (ms > 0) {
-      _autoUnblurTimer = setTimeout(() => _unblur('auto'), ms);
-    }
-    // Dispatch custom event for app-level hooks
-    document.dispatchEvent(new CustomEvent('screenshield:blur', { detail: { reason } }));
+    document.documentElement.classList.add(KILL_CLS);
+    _ovStyle(true);
+    _ov.classList.add('__sg_on');
+    if (_autoT)   { clearTimeout(_autoT);   _autoT   = null; }
+    if (_unblurT) { clearTimeout(_unblurT); _unblurT = null; }
+    const t = ms === undefined ? BLUR_MS : ms;
+    if (t > 0) _autoT = setTimeout(() => _unblur('auto'), t);
+    document.dispatchEvent(new CustomEvent('sg:blur', { detail: why }));
   }
 
-  function _unblur(reason) {
+  function _unblur(why) {
     if (!_blurred) return;
-    // Smooth unblur — short transition only when unblurring
-    _el.style.transition    = 'opacity 280ms ease';
-    _el.style.opacity       = '0';
-    _el.style.pointerEvents = 'none';
     _blurred = false;
-    if (_autoUnblurTimer) { clearTimeout(_autoUnblurTimer); _autoUnblurTimer = null; }
-    document.dispatchEvent(new CustomEvent('screenshield:unblur', { detail: { reason } }));
+    document.documentElement.classList.remove(KILL_CLS);
+    _ovStyle(false);
+    _ov.classList.remove('__sg_on');
+    if (_autoT)   { clearTimeout(_autoT);   _autoT   = null; }
+    if (_unblurT) { clearTimeout(_unblurT); _unblurT = null; }
+    document.dispatchEvent(new CustomEvent('sg:unblur', { detail: why }));
   }
 
-  function _scheduleUnblur(delayMs) {
-    if (_unblurTimer) clearTimeout(_unblurTimer);
-    _unblurTimer = setTimeout(() => _unblur('focus'), delayMs);
+  function _sched(ms) {
+    if (_unblurT) clearTimeout(_unblurT);
+    _unblurT = setTimeout(() => _unblur('sched'), ms);
   }
 
-  /* ── Signal combiner — weak signals accumulate ───────────────────── */
-  function _signal(strength) {
-    // strength: 'strong' = immediate blur, 'weak' = needs combination
-    const now = Date.now();
-    if (strength === 'strong') { _blur('strong-signal'); return; }
-    // Weak signal: accumulate within window
-    if (now - _lastSignalTs > CFG.SIGNAL_WINDOW_MS) _recentSignals = 0;
-    _lastSignalTs = now;
-    _recentSignals++;
-    if (_recentSignals >= 2) { _recentSignals = 0; _blur('combined-weak'); }
+  function _sig(s) {
+    if (!_active) return;
+    if (s === 'S') { _blur('strong'); return; }
+    const n = Date.now();
+    if (n - _weakTs > WEAK_WIN) _weakN = 0;
+    _weakTs = n;
+    if (++_weakN >= WEAK_N) { _weakN = 0; _blur('weak'); }
   }
 
-  /* ── Signal 1: Multi-touch (screenshot gesture) ──────────────────── */
-  // touchstart fires BEFORE the OS screenshot can process the gesture —
-  // we blur the DOM before the screenshot frame is composited.
-  document.addEventListener('touchstart', e => {
-    _touchActive = true;
-    const n = e.touches.length;
-    if (n > _maxTouches) _maxTouches = n;
+  /* ── Watermark ─────────────────────────────────────────────────────────── */
+  let _cells = null;
+  function _buildWm() {
+    const f = document.createDocumentFragment();
+    _cells = Array.from({ length: 60 }, (_, i) => {
+      const c = document.createElement('div');
+      c.style.cssText = 'display:flex;align-items:center;justify-content:center' +
+        ';padding:26px 0;font:9px/1.3 monospace;color:#4ecdc4;white-space:nowrap';
+      f.appendChild(c);
+      return c;
+    });
+    _wm.appendChild(f);
+  }
 
-    if (n >= CFG.TOUCH_THRESHOLD) {
-      // Immediate blur — screenshot hasn't happened yet
-      _blur('3-finger', CFG.BLUR_MS);
+  function _refreshWm() {
+    if (!_cells) _buildWm();
+    const ts   = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const line = (_username || 'ANONYMOUS') + ' \u00b7 ' + ts;
+    _cells.forEach((c, i) => { c.textContent = i % 2 ? '\u00b7 \u00b7 \u00b7' : line; });
+    _wmT = setTimeout(_refreshWm, WM_MS);
+  }
+
+  /* ── MutationObserver — prevent removal / override ─────────────────────── */
+  new MutationObserver(ms => {
+    for (const m of ms) {
+      for (const n of m.removedNodes) {
+        if (n === _ov)  { _root.appendChild(_ov); }
+        if (n === _wm)  { _root.appendChild(_wm); }
+        if (n === _sty) { (document.head || document.documentElement).appendChild(_sty); }
+      }
+      if (m.type === 'attributes' && m.target === _ov && _blurred) {
+        _ovStyle(true); _ov.classList.add('__sg_on');
+      }
     }
+  }).observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true,
+    attributeFilter: ['style', 'class'],
+  });
+
+  /* Style reapply loop */
+  ;(function _loop() {
+    if (_blurred && !document.documentElement.classList.contains(KILL_CLS))
+      document.documentElement.classList.add(KILL_CLS);
+    _reapplyT = setTimeout(_loop, 800);
+  })();
+
+  /* ── Signals ───────────────────────────────────────────────────────────── */
+  /* 1. Multi-touch */
+  document.addEventListener('touchstart', e => {
+    const n = e.touches.length;
+    if (n > _maxTouch) _maxTouch = n;
+    if (n >= 3) _sig('S');
   }, { passive: true, capture: true });
 
   document.addEventListener('touchmove', e => {
-    // Additional check: if 3 fingers detected during move
-    if (e.touches.length >= CFG.TOUCH_THRESHOLD && !_blurred) {
-      _blur('3-finger-move', CFG.BLUR_MS);
-    }
+    if (e.touches.length >= 3 && !_blurred) _sig('S');
   }, { passive: true, capture: true });
 
   document.addEventListener('touchend', e => {
-    if (e.touches.length === 0) {
-      _touchActive = false;
-      _maxTouches  = 0;
-    }
+    if (!e.touches.length) _maxTouch = 0;
   }, { passive: true });
 
-  /* ── Signal 2: Visibility — most reliable for screen recording ───── */
+  /* 2. Visibility */
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      // Immediate — no timer — stay blurred until visible + settled
-      _blur('visibility-hidden', CFG.HIDDEN_BLUR_MS);
-    } else {
-      // Visible again: wait for OS to settle before unblurring
-      _scheduleUnblur(CFG.UNBLUR_DEBOUNCE);
-    }
+    document.visibilityState === 'hidden' ? _blur('hidden', HIDDEN_MS) : _sched(UNBLUR_DELAY);
   });
 
-  /* ── Signal 3: Window blur (notification bar, app switcher) ─────── */
-  let _blurFocusDelta = 0;
-  let _lastBlurTs     = 0;
-
+  /* 3. Blur/focus timing */
   window.addEventListener('blur', () => {
-    const now = Date.now();
-    _blurFocusDelta = now - _lastBlurTs;
+    const now = Date.now(), d = now - _lastBlurTs;
     _lastBlurTs = now;
-    // Very rapid blur/focus (< 150ms) = likely screen recording event
-    if (_blurFocusDelta > 0 && _blurFocusDelta < 150) {
-      _signal('strong');
-    } else {
-      _signal('weak');
-    }
+    _sig(d > 0 && d < 150 ? 'S' : 'W');
   });
+  window.addEventListener('focus', () => _sched(UNBLUR_DELAY));
 
-  window.addEventListener('focus', () => {
-    _scheduleUnblur(CFG.UNBLUR_DEBOUNCE);
-  });
-
-  /* ── Signal 4: Media device change (screen capture device) ──────── */
-  try {
-    if (navigator.mediaDevices?.addEventListener) {
-      navigator.mediaDevices.addEventListener('devicechange', () => {
-        _signal('weak');
-      });
-    }
-  } catch {}
-
-  /* ── Signal 5: Keyboard screenshot shortcuts ─────────────────────── */
+  /* 4. Keyboard */
   window.addEventListener('keydown', e => {
-    const key = e.key?.toLowerCase() || '';
-    // PrintScreen, meta+shift+3 (mac), meta+shift+4, ctrl+printscreen
-    if (
-      key === 'printscreen'                              ||
-      (e.metaKey && e.shiftKey && (key === '3' || key === '4' || key === '5')) ||
-      (e.ctrlKey && key === 'printscreen')
-    ) {
-      _blur('keyboard-screenshot', CFG.BLUR_MS);
-    }
+    const k = (e.key || '').toLowerCase();
+    if (k === 'printscreen' || k === 'sysrq' ||
+        (e.metaKey && e.shiftKey && '345s'.includes(k)) ||
+        (e.ctrlKey && k === 'printscreen')) _sig('S');
   }, { capture: true });
 
-  /* ── Signal 6: Page Visibility API + requestAnimationFrame timing ── */
-  // Screen recording tools often cause frame drops. We use this heuristic
-  // carefully to avoid false positives from normal lag.
-  let _lastFrameTs = 0;
-  let _checkFrames = false;
+  /* 5. DevTools */
+  setInterval(() => {
+    const wd = window.outerWidth - window.innerWidth;
+    const hd = window.outerHeight - window.innerHeight;
+    if (wd > DEVTOOLS_THR || hd > DEVTOOLS_THR) _sig('S');
+  }, 2000);
 
-  function _frameCheck(ts) {
-    if (!_checkFrames) return;
-    const delta = ts - _lastFrameTs;
-    _lastFrameTs = ts;
-    // Unusually long frame (>800ms gap while tab is visible) could indicate
-    // a screencap tool compositing — very conservative threshold
-    if (delta > 800 && document.visibilityState === 'visible' && !_blurred) {
-      _signal('weak');
-    }
-    requestAnimationFrame(_frameCheck);
+  /* 6. Device change */
+  try { navigator.mediaDevices?.addEventListener('devicechange', () => _sig('W')); } catch {}
+
+  /* 7. rAF frame-drop */
+  function _raf(ts) {
+    if (!_rafOn) return;
+    const g = ts - _lastFrame; _lastFrame = ts;
+    if (g > 800 && document.visibilityState === 'visible' && !_blurred) _sig('W');
+    requestAnimationFrame(_raf);
   }
+  function _startRaf() {
+    if (_rafOn) return; _rafOn = true;
+    _lastFrame = performance.now(); requestAnimationFrame(_raf);
+  }
+  if (document.visibilityState === 'visible') _startRaf();
 
-  // Only run frame check when page is visible
-  document.addEventListener('visibilitychange', () => {
-    _checkFrames = document.visibilityState === 'visible';
-    if (_checkFrames) {
-      _lastFrameTs = performance.now();
-      requestAnimationFrame(_frameCheck);
-    }
-  });
+  /* ── Auto re-enable guard ─────────────────────────────────────────────── */
+  setInterval(() => {
+    if (!document.getElementById('__sg_sty'))
+      (document.head || document.documentElement).appendChild(_sty);
+  }, 4000);
 
-  /* ── Public API ──────────────────────────────────────────────────── */
-  window.ScreenGuard = {
-    blur:    (ms) => _blur('manual', ms),
-    unblur:  ()   => _unblur('manual'),
-    toggle:  ()   => _blurred ? _unblur('manual') : _blur('manual'),
-    enable:  ()   => { CFG.ENABLE = true; },
-    disable: ()   => { CFG.ENABLE = false; _unblur('disabled'); },
-    isBlurred: () => _blurred,
+  /* ── Init ─────────────────────────────────────────────────────────────── */
+  const _init = () => {
+    if (!document.body.contains(_ov))  document.body.appendChild(_ov);
+    if (!document.body.contains(_wm))  document.body.appendChild(_wm);
+    _refreshWm();
   };
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', _init, { once: true })
+    : _init();
 
+  /* ── API ──────────────────────────────────────────────────────────────── */
+  return {
+    blur:      (ms) => _blur('api', ms),
+    unblur:    ()   => _unblur('api'),
+    enable:    ()   => { _active = true; },
+    disable:   ()   => { _active = false; _unblur('off'); },
+    isActive:  ()   => _active,
+    isBlurred: ()   => _blurred,
+    setUser:   (u)  => { _username = (u || '').toUpperCase(); },
+  };
 })();
